@@ -10,14 +10,8 @@ target_sources(
             random.cpp
 )
 
-target_include_directories(
-    request
-        PUBLIC
-            "${CMAKE_SOURCE_DIR}/src/toml11"
-)
-
 target_link_libraries(
     request
-        PRIVATE
-            toml11
+        PUBLIC
+            CONAN_PKG::toml11
 )

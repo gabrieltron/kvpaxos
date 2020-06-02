@@ -1,7 +1,5 @@
 add_subdirectory(request)
 add_subdirectory(evclient)
-add_subdirectory(toml11)
-add_subdirectory(libpaxos)
 
 add_executable(main)
 
@@ -14,8 +12,8 @@ target_sources(
 target_link_libraries(
     main
         PRIVATE
-            toml11
+            CONAN_PKG::toml11
             request
             evclient
-            libpaxos
+            evpaxos
 )
