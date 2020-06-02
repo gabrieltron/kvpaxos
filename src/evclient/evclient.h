@@ -14,8 +14,7 @@ extern "C" {
 #include <event2/event.h>
 #include <netinet/tcp.h>
 
-#include "libpaxos/evpaxos/include/evpaxos.h"
-#include "libpaxos/paxos/include/paxos.h"
+#include <evpaxos.h>
 
 
 struct client_value

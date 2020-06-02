@@ -1,9 +1,3 @@
-[submodule "src/toml11"]
-	path = src/toml11
-	url = https://github.com/ToruNiina/toml11
-[submodule "src/master"]
-	path = src/master
-	url = https://bitbucket.org/sciascid/libpaxos/src/master/
-[submodule "src/libpaxos"]
-	path = src/libpaxos
+[submodule "deps/libpaxos"]
+	path = deps/libpaxos
 	url = https://bitbucket.org/sciascid/libpaxos.git
