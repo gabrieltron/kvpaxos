@@ -17,6 +17,7 @@ target_include_directories(
 target_link_libraries(
     evclient
         PRIVATE
+            CONAN_PKG::libevent
             evpaxos
             request
 )
