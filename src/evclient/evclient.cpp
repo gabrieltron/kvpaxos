@@ -76,7 +76,6 @@ make_client(
 	c->outstanding = outstanding;
 	c->send_buffer = (char *)malloc(sizeof(struct client_value) + value_size);
 
-	paxos_config.learner_catch_up = 0;
     if (on_deliver != NULL)
 	    c->learner = evlearner_init(config, on_deliver, c, c->base);
 
