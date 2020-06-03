@@ -1,5 +1,6 @@
 #include "evclient.h"
 
+
 long
 timeval_diff(struct timeval* t1, struct timeval* t2)
 {
@@ -59,7 +60,7 @@ connect_to_proposer(
 struct client*
 make_client(
     const char* config, int proposer_id, int outstanding, int value_size,
-    deliver_function on_deliver, bufferevent_event_cb on_connect
+    bufferevent_event_cb on_connect, deliver_function on_deliver
 )
 {
 	struct client* c;
@@ -98,18 +99,3 @@ client_free(struct client* c)
 	free(c);
 }
 
-struct client*
-start_client(
-    const char* config, int proposer_id, int outstanding, int value_size,
-    deliver_function on_deliver, bufferevent_event_cb on_connect
-)
-{
-	struct client* client;
-	client = make_client(
-        config, proposer_id, outstanding, value_size, on_deliver, on_connect
-    );
-	signal(SIGPIPE, SIG_IGN);
-	event_base_dispatch(client->base);
-
-    return client;
-}

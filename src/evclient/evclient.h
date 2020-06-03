@@ -49,9 +49,9 @@ struct client
 	struct evlearner* learner;
 };
 
-struct client* start_client(
+struct client* make_client(
     const char* config, int proposer_id, int outstanding, int value_size,
-    deliver_function on_deliver, bufferevent_event_cb on_connect
+    bufferevent_event_cb on_connect, deliver_function on_deliver
 );
 void client_free(struct client* c);
 

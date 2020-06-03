@@ -9,10 +9,10 @@
 
 #include <toml11/toml.hpp>
 #include "random.h"
+#include "request.hpp"
 
 namespace workload {
 
-typedef std::unordered_set<int> Request;
 typedef toml::basic_value<toml::discard_comments, std::unordered_map> toml_config;
 
 std::vector<Request> create_requests(std::string config_path);
