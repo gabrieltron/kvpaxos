@@ -19,22 +19,6 @@ handle_sigint(int sig, short ev, void* arg)
 	event_base_loopexit(base, NULL);
 }
 
-void
-update_stats(struct stats* stats, struct client_value* delivered, size_t size)
-{
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	long lat = timeval_diff(&delivered->t, &tv);
-	stats->delivered_count++;
-	stats->delivered_bytes += size;
-	stats->avg_latency = stats->avg_latency +
-		((lat - stats->avg_latency) / stats->delivered_count);
-	if (stats->min_latency == 0 || lat < stats->min_latency)
-		stats->min_latency = lat;
-	if (lat > stats->max_latency)
-		stats->max_latency = lat;
-}
-
 struct bufferevent*
 connect_to_proposer(
     struct client* c, const char* config, int proposer_id,
@@ -75,7 +59,7 @@ make_client(
 	c->id = rand();
 	c->value_size = value_size;
 	c->outstanding = outstanding;
-	c->send_buffer = (char *)malloc(sizeof(struct client_value) + value_size);
+	c->send_buffer = (char *)malloc(sizeof(struct client_request) + value_size);
 
     if (on_deliver != NULL)
 	    c->learner = evlearner_init(config, on_deliver, c, c->base);
