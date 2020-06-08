@@ -57,15 +57,13 @@ find_client(struct peers** peers) {
 static void
 deliver(unsigned iid, char* value, size_t size, void* arg)
 {
-	struct client_value* val = (struct client_value*)value;
+	auto* val = (struct client_request*)value;
 	if (verbose) {
-		std::cout << "[" << val->value << "] ";
-		std::cout << (long)val->size << " bytes\n";
-		std::cout << "From client " << val->client_id << "\n";
+		std::cout << "[" << val->args << "] ";
+		std::cout << (size_t)val->size << " bytes\n";
+		std::cout << "Type " << val->type << "\n";
 	}
 
-	auto* peers = static_cast<struct peers*>(arg);
-	std::cout << "Currently with " << peers->clients[1]->addr.sin_addr.s_addr << " clients\n";
 }
 
 static void

@@ -10,12 +10,18 @@
 #include <evpaxos/paxos.h>
 
 
-struct client_value
+enum request_type
 {
-	int client_id;
-	struct timeval t;
+	READ,
+	WRITE,
+	SCAN
+};
+
+struct client_request
+{
+	request_type type;
 	size_t size;
-	char value[0];
+	char args[0];
 };
 
 struct stats

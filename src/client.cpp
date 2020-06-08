@@ -11,10 +11,10 @@ const int VALUE_SIZE = 64;
 
 
 static void send_requests(client* c, std::string config) {
-	auto* v = (struct client_value*)c->send_buffer;
-    v->client_id = c->id;
+	auto* v = (struct client_request*)c->send_buffer;
     v->size = c->value_size;
-    auto size = sizeof(client_value) + v->size;
+    auto size = sizeof(client_request) + v->size;
+    v->type = READ;
 
     auto requests = workload::create_requests(config);
     for (auto request: requests) {
@@ -22,10 +22,9 @@ static void send_requests(client* c, std::string config) {
         stream << request;
         auto str = stream.str();
         for (auto i = 0; i < str.size(); i++) {
-            v->value[i] = str[i];
+            v->args[i] = str[i];
         }
-        v->value[str.size()] = 0;
-        gettimeofday(&v->t, NULL);
+        v->args[str.size()] = 0;
         paxos_submit(c->bev, c->send_buffer, size);
     }
 }
