@@ -11,9 +11,9 @@ const int VALUE_SIZE = 64;
 
 
 static void send_requests(client* c, std::string config) {
-	auto* v = (struct client_request*)c->send_buffer;
+	auto* v = (struct client_message*)c->send_buffer;
     v->size = c->value_size;
-    auto size = sizeof(client_request) + v->size;
+    auto size = sizeof(struct client_message) + v->size;
     v->type = READ;
 
     auto requests = workload::create_requests(config);

@@ -59,7 +59,7 @@ make_client(
 	c->id = rand();
 	c->value_size = value_size;
 	c->outstanding = outstanding;
-	c->send_buffer = (char *)malloc(sizeof(struct client_request) + value_size);
+	c->send_buffer = (char *)malloc(sizeof(client_message) + value_size);
 
     if (on_deliver != NULL)
 	    c->learner = evlearner_init(config, on_deliver, c, c->base);

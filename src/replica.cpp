@@ -57,9 +57,9 @@ find_client(struct peers** peers) {
 static void
 deliver(unsigned iid, char* value, size_t size, void* arg)
 {
-	auto* val = (struct client_request*)value;
+	auto* val = (struct client_message*)value;
 	if (verbose) {
-		std::cout << "[" << val->args << "] ";
+		std::cout << "[" << std::string(val->args) << "] ";
 		std::cout << (size_t)val->size << " bytes\n";
 		std::cout << "Type " << val->type << "\n";
 	}

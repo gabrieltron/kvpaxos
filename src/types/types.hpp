@@ -17,13 +17,6 @@ enum request_type
 	SCAN
 };
 
-struct client_request
-{
-	request_type type;
-	size_t size;
-	char args[0];
-};
-
 struct stats
 {
 	long min_latency;
