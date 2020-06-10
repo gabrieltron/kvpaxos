@@ -6,6 +6,8 @@
 	passing.
 */
 
+#include <unordered_set>
+
 #include <evpaxos.h>
 #include <evpaxos/paxos.h>
 
@@ -26,6 +28,13 @@ struct stats
 	size_t delivered_bytes;
 };
 
+struct bufferevent_callbacks
+{
+	bufferevent_data_cb readcb;
+	bufferevent_data_cb writecb;
+	bufferevent_event_cb eventcb;
+};
+
 struct client
 {
 	int id;
@@ -35,6 +44,8 @@ struct client
 	struct stats stats;
 	struct event_base* base;
 	struct bufferevent* bev;
+	struct evconnlistener* listener;
+	struct bufferevent_callbacks* callbacks;
 	struct event* stats_ev;
 	struct timeval stats_interval;
 	struct event* sig;

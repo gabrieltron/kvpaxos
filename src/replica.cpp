@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <string>
 #include <signal.h>
+#include <netinet/tcp.h>
 
 #include "types/types.hpp"
 
@@ -49,9 +50,40 @@ handle_sigint(int sig, short ev, void* arg)
 	event_base_loopexit(base, NULL);
 }
 
-static peer*
-find_client(struct peers** peers) {
+static void
+on_event(struct bufferevent* bev, short ev, void *arg)
+{
+	if (ev & BEV_EVENT_EOF || ev & BEV_EVENT_ERROR) {
+		bufferevent_free(bev);
+	}
+}
 
+struct bufferevent*
+connect_to_client(unsigned long ip, unsigned short port, struct event_base* base)
+{
+	struct bufferevent* bev;
+
+	struct sockaddr_in addr;
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = ip;
+	addr.sin_port = port;
+
+	bev = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
+	bufferevent_setcb(bev, NULL, NULL, on_event, NULL);
+	bufferevent_enable(bev, EV_READ|EV_WRITE);
+	bufferevent_socket_connect(bev, (struct sockaddr*)&addr, sizeof(addr));
+	int flag = 1;
+	setsockopt(bufferevent_getfd(bev), IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(int));
+	return bev;
+}
+
+static void
+answer_client(const char* answer, size_t length, char* og_message,
+	struct event_base* base)
+{
+	auto* message = (struct client_message*)og_message;
+	auto* bev = connect_to_client(message->s_addr, message->sin_port, base);
+	bufferevent_write(bev, answer, length);
 }
 
 static void
@@ -64,6 +96,9 @@ deliver(unsigned iid, char* value, size_t size, void* arg)
 		std::cout << "Type " << val->type << "\n";
 	}
 
+	answer_client("Request recieved", 17, value,
+		static_cast<struct event_base*>(arg)
+	);
 }
 
 static void
@@ -75,14 +110,12 @@ start_replica(int id, const char* config)
 	deliver_function cb = deliver;
 
 	base = event_base_new();
-	replica = evpaxos_replica_init(id, config, cb, NULL, base);
+	replica = evpaxos_replica_init(id, config, cb, base, base);
 
 	if (replica == NULL) {
 		printf("Could not start the replica!\n");
 		exit(1);
 	}
-
-    replica->arg = replica->peers;
 
 	sig = evsignal_new(base, SIGINT, handle_sigint, base);
 	evsignal_add(sig, NULL);
