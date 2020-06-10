@@ -6,3 +6,8 @@ target_sources(
             types.hpp
 )
 
+target_link_libraries(
+    types
+        INTERFACE
+            evpaxos
+)

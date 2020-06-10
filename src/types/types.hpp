@@ -6,6 +6,10 @@
 	passing.
 */
 
+#ifndef _KVPAXOS_TYPES_H_
+#define _KVPAXOS_TYPES_H_
+
+
 #include <unordered_set>
 
 #include <evpaxos.h>
@@ -201,3 +205,5 @@ struct peers
 	int subs_count;
 	struct subscription subs[32];
 };
+
+#endif

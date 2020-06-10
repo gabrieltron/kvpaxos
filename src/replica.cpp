@@ -29,18 +29,27 @@
 #include <evpaxos.h>
 #include <evpaxos/paxos.h>
 
+#include <algorithm>
 #include <iostream>
+#include <iterator>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string>
+#include <sstream>
 #include <signal.h>
 #include <netinet/tcp.h>
+#include <vector>
 
 #include "types/types.hpp"
+#include "storage/storage.h"
 
 
 static int verbose = 0;
 
+struct callback_args {
+	event_base* base;
+	kvstorage::Storage* storage;
+};
 
 static void
 handle_sigint(int sig, short ev, void* arg)
@@ -86,19 +95,62 @@ answer_client(const char* answer, size_t length, char* og_message,
 	bufferevent_write(bev, answer, length);
 }
 
+std::vector<std::string>
+split_string(std::string& string, char delimiter)
+{
+	std::replace(string.begin(), string.end(), delimiter, ' ');
+
+	std::vector<std::string> array;
+	std::stringstream ss(string);
+	std::string temp;
+	while (ss >> temp)
+	    array.push_back(temp);
+}
+
 static void
 deliver(unsigned iid, char* value, size_t size, void* arg)
 {
-	auto* val = (struct client_message*)value;
-	if (verbose) {
-		std::cout << "[" << std::string(val->args) << "] ";
-		std::cout << (size_t)val->size << " bytes\n";
-		std::cout << "Type " << val->type << "\n";
+	auto* request = (struct client_message*)value;
+	auto* args = (callback_args*) arg;
+	auto* storage = args->storage;
+	auto query = std::string(request->args);
+	auto query_args = split_string(query, ',');
+
+	std::string answer;
+	switch (static_cast<request_type>(request->type))
+	{
+	case READ:
+	{
+		auto key = std::stoi(query_args[0]);
+		answer = storage->read(key);
+		break;
 	}
 
-	answer_client("Request recieved", 17, value,
-		static_cast<struct event_base*>(arg)
-	);
+	case WRITE:
+	{
+		auto key = std::stoi(query_args[0]);
+		auto value_ = query_args[1];
+		answer = storage->write(key, value_);
+		break;
+	}
+
+	case SCAN:
+	{
+		auto key = std::stoi(query_args[0]);
+		auto length = std::stoi(query_args[1]);
+		auto values = storage->scan(key, length);
+
+		std::ostringstream oss;
+		std::copy(values.begin(), values.end(), std::ostream_iterator<std::string>(oss, ","));
+		answer = std::string(oss.str());
+		break;
+	}
+
+	default:
+		break;
+	}
+
+	answer_client("Request recieved", 17, value, args->base);
 }
 
 static void
@@ -110,12 +162,17 @@ start_replica(int id, const char* config)
 	deliver_function cb = deliver;
 
 	base = event_base_new();
-	replica = evpaxos_replica_init(id, config, cb, base, base);
-
+	replica = evpaxos_replica_init(id, config, cb, base, NULL);
 	if (replica == NULL) {
 		printf("Could not start the replica!\n");
 		exit(1);
 	}
+
+	auto storage = kvstorage::Storage();
+	struct callback_args args;
+	args.base = base;
+	args.storage = &storage;
+	replica->arg = &args;
 
 	sig = evsignal_new(base, SIGINT, handle_sigint, base);
 	evsignal_add(sig, NULL);
