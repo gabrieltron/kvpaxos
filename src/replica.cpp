@@ -92,6 +92,7 @@ answer_client(const char* answer, size_t length, char* og_message,
 {
 	auto* message = (struct client_message*)og_message;
 	auto* bev = connect_to_client(message->s_addr, message->sin_port, base);
+	std::cout << "Going to answer" << std::endl;
 	bufferevent_write(bev, answer, length);
 }
 
@@ -113,9 +114,8 @@ deliver(unsigned iid, char* value, size_t size, void* arg)
 	auto* request = (struct client_message*)value;
 	auto* args = (callback_args*) arg;
 	auto* storage = args->storage;
-	auto query = std::string(request->args);
-	auto query_args = split_string(query, ',');
 
+	/*
 	std::string answer;
 	switch (static_cast<request_type>(request->type))
 	{
@@ -150,6 +150,7 @@ deliver(unsigned iid, char* value, size_t size, void* arg)
 		break;
 	}
 
+	*/
 	answer_client("Request recieved", 17, value, args->base);
 }
 
@@ -162,7 +163,7 @@ start_replica(int id, const char* config)
 	deliver_function cb = deliver;
 
 	base = event_base_new();
-	replica = evpaxos_replica_init(id, config, cb, base, NULL);
+	replica = evpaxos_replica_init(id, config, cb, NULL, base);
 	if (replica == NULL) {
 		printf("Could not start the replica!\n");
 		exit(1);
