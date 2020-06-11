@@ -40,7 +40,7 @@
 #include <netinet/tcp.h>
 #include <vector>
 
-#include "types/types.hpp"
+#include "types/types.h"
 #include "storage/storage.h"
 
 

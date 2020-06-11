@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "types/types.hpp"
+#include "types/types.h"
 
 
 namespace kvstorage {

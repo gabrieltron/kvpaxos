@@ -16,6 +16,6 @@ target_include_directories(
 
 target_link_libraries(
     storage
-        INTERFACE
+        PRIVATE
             types
 )

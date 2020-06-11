@@ -12,7 +12,7 @@
 #include <signal.h>
 #include <netinet/tcp.h>
 
-#include "types/types.hpp"
+#include "types/types.h"
 
 
 struct client* make_client(

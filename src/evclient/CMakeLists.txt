@@ -20,6 +20,5 @@ target_link_libraries(
             CONAN_PKG::libevent
             evpaxos
             request
-        INTERFACE
             types
 )

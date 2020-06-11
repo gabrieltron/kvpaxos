@@ -10,8 +10,6 @@
 #define _KVPAXOS_TYPES_H_
 
 
-#include <unordered_set>
-
 #include <evpaxos.h>
 #include <evpaxos/paxos.h>
 

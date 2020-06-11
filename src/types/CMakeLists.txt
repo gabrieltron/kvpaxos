@@ -1,13 +1,15 @@
-add_library(types INTERFACE)
+add_library(types)
 
 target_sources(
     types
-        INTERFACE
-            types.hpp
+        PUBLIC
+            types.h
+        PRIVATE
+            types.cpp
 )
 
 target_link_libraries(
     types
-        INTERFACE
+        PUBLIC
             evpaxos
 )

@@ -20,8 +20,6 @@ target_link_libraries(
             evclient
             evpaxos
             storage
-
-        INTERFACE
             types
 )
 
@@ -39,7 +37,5 @@ target_link_libraries(
             evclient
             evpaxos
             storage
-
-        INTERFACE
             types
 )
