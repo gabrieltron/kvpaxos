@@ -4,34 +4,29 @@
 #include <string>
 #include <unordered_set>
 
+#include "types/types.h"
+
 
 namespace workload {
 
 class Request {
 public:
 
-    size_t size() const {
-        return accessed_data_.size();
-    }
-    std::unordered_set<int>::const_iterator begin() const {
-        return accessed_data_.begin();
-    }
-    std::unordered_set<int>::const_iterator end() const {
-        return accessed_data_.end();
-    }
-    void insert(int value) {
-        accessed_data_.insert(value);
-    }
-    std::unordered_set<int>::const_iterator find(int value) {
-        return accessed_data_.find(value);
-    }
+    Request(request_type type, int key, std::string args):
+        type_{type},
+        key_{key},
+        args_{args}
+    {}
+
+    request_type type() const {return type_;}
+    int key() const {return key_;}
+    const std::string& args() const {return args_;}
 
 private:
-    std::unordered_set<int> accessed_data_;
-
+    request_type type_;
+    int key_;
+    std::string args_;
 };
-
-std::ostream& operator<<(std::ostream &stream, const Request& request);
 
 }
 

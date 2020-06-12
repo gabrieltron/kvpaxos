@@ -13,27 +13,26 @@
 
 
 const int OUTSTANDING = 1;
-const int VALUE_SIZE = 64;
+const int VALUE_SIZE = 100;
 static unsigned short REPLY_PORT;
 
 
-static void send_requests(client* c, std::string config) {
+static void
+send_requests(client* c, const std::vector<workload::Request>& requests)
+{
 	auto* v = (struct client_message*)c->send_buffer;
     v->size = c->value_size;
     auto size = sizeof(struct client_message) + v->size;
     v->sin_port = htons(REPLY_PORT);
-    v->type = READ;
 
-    auto requests = workload::create_requests(config);
-    for (auto request: requests) {
-        std::stringstream stream;
-        stream << request;
-        auto str = stream.str();
-        for (auto i = 0; i < str.size(); i++) {
-            v->args[i] = str[i];
-        }
-        v->args[str.size()] = 0;
+    auto counter = 0;
+    for (auto& request: requests) {
+        v->id = counter;
+        v->type = request.type();
+        v->key = request.key();
+        memset(v->args, '#', v->size);
         paxos_submit(c->bev, c->send_buffer, size);
+        counter++;
     }
 }
 
@@ -58,14 +57,16 @@ int main(int argc, char* argv[]) {
     REPLY_PORT = atoi(argv[1]);
     auto client_id = atoi(argv[2]);
     auto client_config = std::string(argv[3]);
-    auto requests_config = std::string(argv[4]);
+    auto requests_path = std::string(argv[4]);
 
     auto* client = make_client(
         client_config.c_str(), client_id, OUTSTANDING, VALUE_SIZE,
         REPLY_PORT, nullptr, read_reply
     );
 	signal(SIGPIPE, SIG_IGN);
-    send_requests(client, requests_config);
+
+    auto requests = workload::import_requests(requests_path);
+    send_requests(client, requests);
 	event_base_dispatch(client->base);
 
     client_free(client);

@@ -92,7 +92,6 @@ answer_client(const char* answer, size_t length, char* og_message,
 {
 	auto* message = (struct client_message*)og_message;
 	auto* bev = connect_to_client(message->s_addr, message->sin_port, base);
-	std::cout << "Going to answer" << std::endl;
 	bufferevent_write(bev, answer, length);
 }
 

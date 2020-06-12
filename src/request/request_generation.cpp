@@ -1,7 +1,27 @@
 #include "request_generation.h"
 
+
 namespace workload {
 
+std::vector<Request> import_requests(const std::string& file_path) {
+    const auto file = toml::parse(file_path);
+    auto str_requests = toml::find<std::vector<std::vector<std::string>>>(
+        file, "requests"
+    );
+
+    auto requests = std::vector<Request>();
+    for (auto& request : str_requests) {
+        auto type = static_cast<request_type>(std::stoi(request[0]));
+        auto key = std::stoi(request[1]);
+        auto arg = request[2];
+
+        requests.push_back(Request(type, key, arg));
+    }
+
+    return requests;
+}
+
+/*
 std::vector<Request> create_requests(
     std::string config_path
 ) {
@@ -26,14 +46,6 @@ std::vector<Request> create_requests(
     );
 
     return requests;
-}
-
-std::vector<Request> import_requests(const toml_config& config) {
-    auto import_path = toml::find<std::string>(
-        config, "workload", "requests", "import_path"
-    );
-
-    // TODO
 }
 
 std::vector<workload::Request> generate_single_data_requests(
@@ -268,5 +280,6 @@ std::vector<Request> merge_requests(
 
     return shuffled_requests;
 }
+*/
 
 }
