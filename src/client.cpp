@@ -13,7 +13,7 @@
 
 
 const int OUTSTANDING = 1;
-const int VALUE_SIZE = 100;
+const int VALUE_SIZE = 128;
 static unsigned short REPLY_PORT;
 
 
@@ -21,8 +21,6 @@ static void
 send_requests(client* c, const std::vector<workload::Request>& requests)
 {
 	auto* v = (struct client_message*)c->send_buffer;
-    v->size = c->value_size;
-    auto size = sizeof(struct client_message) + v->size;
     v->sin_port = htons(REPLY_PORT);
 
     auto counter = 0;
@@ -30,7 +28,18 @@ send_requests(client* c, const std::vector<workload::Request>& requests)
         v->id = counter;
         v->type = request.type();
         v->key = request.key();
-        memset(v->args, '#', v->size);
+        if (request.args().empty()) {
+            memset(v->args, '#', VALUE_SIZE);
+            v->size = VALUE_SIZE;
+        }
+        else {
+            for (auto i = 0; i < request.args().size(); i++) {
+                v->args[i] = request.args()[i];
+            }
+            v->args[request.args().size()] = 0;
+            v->size = request.args().size();
+        }
+        auto size = sizeof(struct client_message) + v->size;
         paxos_submit(c->bev, c->send_buffer, size);
         counter++;
     }
@@ -39,8 +48,8 @@ send_requests(client* c, const std::vector<workload::Request>& requests)
 static void
 read_reply(struct bufferevent* bev, void* args)
 {
-    void* reply = (void *) malloc(800);
-    bufferevent_read(bev, reply, 800);
+    void* reply = (void *) malloc(1031);
+    bufferevent_read(bev, reply, 1031);
     printf("Server said %s\n", (char*) reply);
     free(reply);
 }

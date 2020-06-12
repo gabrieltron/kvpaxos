@@ -149,7 +149,7 @@ deliver(unsigned iid, char* value, size_t size, void* arg)
 		break;
 	}
 
-	answer_client(answer.c_str(), 800, value, args->base);
+	answer_client(answer.c_str(), 1031, value, args->base);
 }
 
 static void
