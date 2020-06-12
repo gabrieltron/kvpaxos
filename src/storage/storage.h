@@ -16,7 +16,7 @@ public:
     Storage() = default;
 
     std::string read(int key) const;
-    std::string write(int key, const std::string& value);
+    void write(int key, const std::string& value);
     std::vector<std::string> scan(int start, int length);
 
 private:

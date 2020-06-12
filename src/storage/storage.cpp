@@ -7,7 +7,7 @@ std::string Storage::read(int key) const {
     return storage_.at(key);
 }
 
-std::string Storage::write(int key, const std::string& value) {
+void Storage::write(int key, const std::string& value) {
     storage_[key] = value;
 }
 

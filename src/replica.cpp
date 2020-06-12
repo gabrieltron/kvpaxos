@@ -114,29 +114,29 @@ deliver(unsigned iid, char* value, size_t size, void* arg)
 	auto* args = (callback_args*) arg;
 	auto* storage = args->storage;
 
-	/*
+	auto type = static_cast<request_type>(request->type);
+	auto key = request->key;
+	auto request_args = std::string(request->args);
+
 	std::string answer;
 	switch (static_cast<request_type>(request->type))
 	{
 	case READ:
 	{
-		auto key = std::stoi(query_args[0]);
 		answer = storage->read(key);
 		break;
 	}
 
 	case WRITE:
 	{
-		auto key = std::stoi(query_args[0]);
-		auto value_ = query_args[1];
-		answer = storage->write(key, value_);
+		storage->write(key, request_args);
+		answer = request_args;
 		break;
 	}
 
 	case SCAN:
 	{
-		auto key = std::stoi(query_args[0]);
-		auto length = std::stoi(query_args[1]);
+		auto length = std::stoi(request_args);
 		auto values = storage->scan(key, length);
 
 		std::ostringstream oss;
@@ -149,8 +149,7 @@ deliver(unsigned iid, char* value, size_t size, void* arg)
 		break;
 	}
 
-	*/
-	answer_client("Request recieved", 17, value, args->base);
+	answer_client(answer.c_str(), 800, value, args->base);
 }
 
 static void
