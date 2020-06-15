@@ -14,6 +14,11 @@
 #include <evpaxos/paxos.h>
 
 
+struct reply_message {
+	int id;
+	char answer[1031];
+};
+
 enum request_type
 {
 	READ,

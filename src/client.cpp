@@ -48,10 +48,9 @@ send_requests(client* c, const std::vector<workload::Request>& requests)
 static void
 read_reply(struct bufferevent* bev, void* args)
 {
-    void* reply = (void *) malloc(1031);
-    bufferevent_read(bev, reply, 1031);
-    printf("Server said %s\n", (char*) reply);
-    free(reply);
+    reply_message reply;
+    bufferevent_read(bev, &reply, sizeof(reply_message));
+    printf("Result of query %d was %s\n", reply.id, reply.answer);
 }
 
 void usage(std::string name) {

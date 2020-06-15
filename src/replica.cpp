@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string>
+#include <string.h>
 #include <sstream>
 #include <signal.h>
 #include <netinet/tcp.h>
@@ -149,7 +150,12 @@ deliver(unsigned iid, char* value, size_t size, void* arg)
 		break;
 	}
 
-	answer_client(answer.c_str(), 1031, value, args->base);
+	reply_message reply;
+	reply.id = request->id;
+	strncpy(reply.answer, answer.c_str(), answer.size());
+	reply.answer[answer.size()] = 0;
+
+	answer_client((char *)&reply, sizeof(reply_message), value, args->base);
 }
 
 static void
