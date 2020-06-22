@@ -124,6 +124,9 @@ make_client(
 	c->callbacks->readcb = on_reply;
 	c->callbacks->writecb = NULL;
 	c->callbacks->eventcb = NULL;
+	c->sent_requests_timestamp = new std::unordered_map<
+		int, std::chrono::_V2::system_clock::time_point
+	>();
 
     auto listener_created = serves_listen(c, reply_port);
     if (not listener_created) {
@@ -148,6 +151,7 @@ client_free(struct client* c)
 	event_base_free(c->base);
 	if (c->learner)
 		evlearner_free(c->learner);
+	delete c->sent_requests_timestamp;
 	free(c);
 }
 

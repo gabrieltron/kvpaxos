@@ -1,9 +1,11 @@
 #include <arpa/inet.h>
+#include <chrono>
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 #include <event2/listener.h>
 #include <iostream>
 #include <netinet/tcp.h>
+#include <unordered_map>
 
 #include <sstream>
 #include <string>
@@ -15,6 +17,8 @@
 const int OUTSTANDING = 1;
 const int VALUE_SIZE = 128;
 static unsigned short REPLY_PORT;
+std::unordered_map<int, std::chrono::_V2::system_clock::time_point>
+	aaa;
 
 
 static void
@@ -40,6 +44,9 @@ send_requests(client* c, const std::vector<workload::Request>& requests)
             v->size = request.args().size();
         }
         auto size = sizeof(struct client_message) + v->size;
+        auto timestamp = std::chrono::system_clock::now();
+        auto kv = std::make_pair(v->id, timestamp);
+        c->sent_requests_timestamp->insert(kv);
         paxos_submit(c->bev, c->send_buffer, size);
         counter++;
     }
@@ -48,9 +55,16 @@ send_requests(client* c, const std::vector<workload::Request>& requests)
 static void
 read_reply(struct bufferevent* bev, void* args)
 {
+    auto* c = (client *)args;
     reply_message reply;
     bufferevent_read(bev, &reply, sizeof(reply_message));
-    printf("Result of query %d was %s\n", reply.id, reply.answer);
+
+    auto delay_ns =
+        std::chrono::system_clock::now() - c->sent_requests_timestamp->at(reply.id);
+    std::cout << "Client " << c->id << "; ";
+    std::cout << "Request " << reply.id << "; ";
+    std::cout << "Delay " << delay_ns.count() << ";\n";
+    c->sent_requests_timestamp->erase(reply.id);
 }
 
 void usage(std::string name) {

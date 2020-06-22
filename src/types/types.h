@@ -10,6 +10,9 @@
 #define _KVPAXOS_TYPES_H_
 
 
+#include <chrono>
+#include <unordered_map>
+
 #include <evpaxos.h>
 #include <evpaxos/paxos.h>
 
@@ -42,12 +45,15 @@ struct bufferevent_callbacks
 	bufferevent_event_cb eventcb;
 };
 
+typedef std::chrono::_V2::system_clock::time_point time_point;
 struct client
 {
 	int id;
 	int value_size;
 	int outstanding;
 	char* send_buffer;
+	std::unordered_map<int, time_point>*
+		sent_requests_timestamp;
 	struct stats stats;
 	struct event_base* base;
 	struct bufferevent* bev;
