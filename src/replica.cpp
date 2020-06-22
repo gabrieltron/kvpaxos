@@ -38,6 +38,8 @@
 #include <string.h>
 #include <sstream>
 #include <signal.h>
+#include <thread>
+#include <mutex>
 #include <netinet/tcp.h>
 #include <vector>
 
@@ -46,10 +48,14 @@
 
 
 static int verbose = 0;
+static int SLEEP = 1;
+static bool RUNNING;
 
 struct callback_args {
 	event_base* base;
 	kvstorage::Storage* storage;
+	int request_counter;
+	std::mutex* counter_mutex;
 };
 
 static void
@@ -58,6 +64,7 @@ handle_sigint(int sig, short ev, void* arg)
 	struct event_base* base = static_cast<event_base*>(arg);
 	printf("Caught signal %d\n", sig);
 	event_base_loopexit(base, NULL);
+	RUNNING = false;
 }
 
 static void
@@ -156,6 +163,22 @@ deliver(unsigned iid, char* value, size_t size, void* arg)
 	reply.answer[answer.size()] = 0;
 
 	answer_client((char *)&reply, sizeof(reply_message), value, args->base);
+	args->counter_mutex->lock();
+	args->request_counter++;
+	args->counter_mutex->unlock();
+}
+
+void
+print_throughput(int sleep_duration, int& counter, std::mutex& counter_mutex)
+{
+	while (RUNNING) {
+		std::this_thread::sleep_for(std::chrono::seconds(sleep_duration));
+		counter_mutex.lock();
+			auto throughput = counter;
+			counter = 0;
+		counter_mutex.unlock();
+		std::cout << "Answered " << throughput << " requests.\n";
+	}
 }
 
 static void
@@ -165,6 +188,7 @@ start_replica(int id, const char* config)
 	struct event_base* base;
 	struct evpaxos_replica* replica;
 	deliver_function cb = deliver;
+	RUNNING = true;
 
 	base = event_base_new();
 	replica = evpaxos_replica_init(id, config, cb, NULL, base);
@@ -174,10 +198,17 @@ start_replica(int id, const char* config)
 	}
 
 	auto storage = kvstorage::Storage();
+	std::mutex counter_mutex;
 	struct callback_args args;
 	args.base = base;
 	args.storage = &storage;
+	args.request_counter = 0;
+	args.counter_mutex = &counter_mutex;
 	replica->arg = &args;
+
+	std::thread throughput_thread(
+		print_throughput, SLEEP, std::ref(args.request_counter), std::ref(counter_mutex)
+	);
 
 	sig = evsignal_new(base, SIGINT, handle_sigint, base);
 	evsignal_add(sig, NULL);
@@ -185,6 +216,7 @@ start_replica(int id, const char* config)
 	signal(SIGPIPE, SIG_IGN);
 	event_base_dispatch(base);
 
+	throughput_thread.join();
 	event_free(sig);
 	evpaxos_replica_free(replica);
 	event_base_free(base);
