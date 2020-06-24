@@ -44,16 +44,17 @@
 #include <vector>
 
 #include "types/types.h"
-#include "storage/storage.h"
+#include "scheduler/scheduler.hpp"
 
 
 static int verbose = 0;
-static int SLEEP = 1;
+static int SLEEP = 2;
+static int N_PARTITIONS = 4;
 static bool RUNNING;
 
 struct callback_args {
 	event_base* base;
-	kvstorage::Storage* storage;
+	kvpaxos::Scheduler<int>* scheduler;
 	int request_counter;
 	std::mutex* counter_mutex;
 };
@@ -120,6 +121,9 @@ deliver(unsigned iid, char* value, size_t size, void* arg)
 {
 	auto* request = (struct client_message*)value;
 	auto* args = (callback_args*) arg;
+	auto* scheduler = args->scheduler;
+	scheduler ->schedule_and_answer(*request);
+	/*
 	auto* storage = args->storage;
 
 	auto type = static_cast<request_type>(request->type);
@@ -163,6 +167,7 @@ deliver(unsigned iid, char* value, size_t size, void* arg)
 	reply.answer[answer.size()] = 0;
 
 	answer_client((char *)&reply, sizeof(reply_message), value, args->base);
+	*/
 	args->counter_mutex->lock();
 	args->request_counter++;
 	args->counter_mutex->unlock();
@@ -197,11 +202,12 @@ start_replica(int id, const char* config)
 		exit(1);
 	}
 
-	auto storage = kvstorage::Storage();
+	kvpaxos::Scheduler<int> scheduler(N_PARTITIONS);
+	scheduler.run();
 	std::mutex counter_mutex;
 	struct callback_args args;
 	args.base = base;
-	args.storage = &storage;
+	args.scheduler = &scheduler;
 	args.request_counter = 0;
 	args.counter_mutex = &counter_mutex;
 	replica->arg = &args;
