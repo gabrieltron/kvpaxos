@@ -52,13 +52,6 @@ public:
         sem_post(&semaphore_);
     }
 
-    void start_barrier(int sync_id, int barrier_size) {
-        printf("Going to create barrier %d\n", sync_id);
-        fflush(stdout);
-        barriers_[sync_id] = pthread_barrier_t();
-        pthread_barrier_init(&barriers_[sync_id], NULL, barrier_size);
-    }
-
     void insert_data(const T& data, int weight = 0) {
         data_set_.insert(data);
         weight_[data] = weight;
@@ -177,15 +170,11 @@ private:
 
             case SYNC:
             {
-                auto barrier_id = request.id;
-                auto coordinator_id = std::stoi(request.args);
-
-                pthread_barrier_wait(&barriers_.at(barrier_id));
-                if (coordinator_id == id_) {
-                    printf("Me %d destroyed barrier %d that should me destroyed by %d\n", id_, barrier_id, coordinator_id);
-                    fflush(stdout);
-                    pthread_barrier_destroy(&barriers_.at(barrier_id));
-                    barriers_.erase(barrier_id);
+                auto barrier = (pthread_barrier_t*) request.s_addr;
+                auto coordinator = pthread_barrier_wait(barrier);
+                if (coordinator) {
+                    pthread_barrier_destroy(barrier);
+                    delete barrier;
                 }
                 break;
             }
@@ -219,8 +208,6 @@ private:
     std::queue<struct client_message> requests_queue_;
     std::mutex queue_mutex_;
 
-    static std::unordered_map<int, pthread_barrier_t> barriers_;
-
     int total_weight_ = 0;
     std::unordered_set<T> data_set_;
     std::unordered_map<T, int> weight_;
@@ -228,9 +215,6 @@ private:
 
 template<typename T>
 kvstorage::Storage Partition<T>::storage_;
-
-template<typename T>
-std::unordered_map<int, pthread_barrier_t> Partition<T>::barriers_;
 
 }
 

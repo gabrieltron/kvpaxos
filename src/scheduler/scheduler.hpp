@@ -90,25 +90,24 @@ private:
         return partitions;
     }
 
-    struct client_message create_sync_request(int coordinator_id) {
+    struct client_message create_sync_request(int n_partitions) {
         struct client_message sync_message;
         sync_message.id = sync_counter_;
         sync_message.type = SYNC;
-        sync_message.key = 0;
 
-        auto string_id = std::to_string(coordinator_id);
-        memcpy(sync_message.args, string_id.c_str(), string_id.size());
-        sync_message.args[string_id.size()] = '\0';
-        sync_counter_++;
+        // this is a gross workaround to send the barrier to the partitions.
+        // a more elegant approach would be appreciated.
+        auto* barrier = new pthread_barrier_t();
+        pthread_barrier_init(barrier, NULL, n_partitions);
+        sync_message.s_addr = (unsigned long) barrier;
+
         return sync_message;
     }
 
     void sync_partitions(const std::unordered_set<Partition<T>*>& partitions) {
-        auto arbitrary_partition = *begin(partitions);
         auto sync_message = std::move(
-            create_sync_request(arbitrary_partition->id())
+            create_sync_request(partitions.size())
         );
-        arbitrary_partition->start_barrier(sync_message.id, partitions.size());
         for (auto partition : partitions) {
             partition->push_request(sync_message);
         }
@@ -127,8 +126,8 @@ private:
     }
 
     int n_partitions_;
-    int round_robin_counter_;
-    int sync_counter_;
+    int round_robin_counter_ = 0;
+    int sync_counter_ = 0;
     kvstorage::Storage storage_;
     std::unordered_map<int, Partition<T>> partitions_;
     std::unordered_map<T, Partition<T>*> data_to_partition_;
