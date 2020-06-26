@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "tbb/concurrent_unordered_map.h"
 #include "types/types.h"
 
 
@@ -20,7 +21,7 @@ public:
     std::vector<std::string> scan(int start, int length);
 
 private:
-    std::unordered_map<int, std::string> storage_;
+    tbb::concurrent_unordered_map<int, std::string> storage_;
 };
 
 };

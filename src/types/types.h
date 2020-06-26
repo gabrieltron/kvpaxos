@@ -26,7 +26,9 @@ enum request_type
 {
 	READ,
 	WRITE,
-	SCAN
+	SCAN,
+	SYNC,
+	ERROR
 };
 
 struct stats
@@ -63,6 +65,7 @@ struct client
 	struct timeval stats_interval;
 	struct event* sig;
 	struct evlearner* learner;
+	void* args;
 };
 
 struct peer

@@ -5,6 +5,7 @@
 #include <event2/listener.h>
 #include <iostream>
 #include <netinet/tcp.h>
+#include <thread>
 #include <unordered_map>
 
 #include <sstream>
@@ -17,9 +18,12 @@
 const int OUTSTANDING = 1;
 const int VALUE_SIZE = 128;
 static unsigned short REPLY_PORT;
-std::unordered_map<int, std::chrono::_V2::system_clock::time_point>
-	aaa;
 
+struct callback_args {
+	int request_counter;
+    int n_load_requests;
+    std::string path;
+};
 
 static void
 send_requests(client* c, const std::vector<workload::Request>& requests)
@@ -34,6 +38,7 @@ send_requests(client* c, const std::vector<workload::Request>& requests)
         v->key = request.key();
         if (request.args().empty()) {
             memset(v->args, '#', VALUE_SIZE);
+            v->args[VALUE_SIZE] = '\0';
             v->size = VALUE_SIZE;
         }
         else {
@@ -56,6 +61,7 @@ static void
 read_reply(struct bufferevent* bev, void* args)
 {
     auto* c = (client *)args;
+    auto* c_args = (struct callback_args *) c->args;
     reply_message reply;
     bufferevent_read(bev, &reply, sizeof(reply_message));
 
@@ -63,8 +69,17 @@ read_reply(struct bufferevent* bev, void* args)
         std::chrono::system_clock::now() - c->sent_requests_timestamp->at(reply.id);
     std::cout << "Client " << c->id << "; ";
     std::cout << "Request " << reply.id << "; ";
+    std::cout << "He said " << reply.answer << "; ";
     std::cout << "Delay " << delay_ns.count() << ";\n";
     c->sent_requests_timestamp->erase(reply.id);
+
+    c_args->request_counter++;
+    if (c_args->request_counter == c_args->n_load_requests) {
+        auto requests = std::move(workload::import_requests(
+            c_args->path, "requests"
+        ));
+        send_requests(c, requests);
+    }
 }
 
 void usage(std::string name) {
@@ -88,7 +103,13 @@ int main(int argc, char* argv[]) {
     );
 	signal(SIGPIPE, SIG_IGN);
 
-    auto requests = workload::import_requests(requests_path);
+    struct callback_args args;
+    args.request_counter = 0;
+    args.path = requests_path;
+    client->args = &args;
+
+    auto requests = std::move(workload::import_requests(requests_path, "load_requests"));
+    args.n_load_requests = requests.size();
     send_requests(client, requests);
 	event_base_dispatch(client->base);
 

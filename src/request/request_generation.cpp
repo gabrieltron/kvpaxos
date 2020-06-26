@@ -3,10 +3,12 @@
 
 namespace workload {
 
-std::vector<Request> import_requests(const std::string& file_path) {
+std::vector<Request> import_requests(const std::string& file_path,
+    const std::string& field)
+    {
     const auto file = toml::parse(file_path);
     auto str_requests = toml::find<std::vector<std::vector<std::string>>>(
-        file, "requests"
+        file, field
     );
 
     auto requests = std::vector<Request>();

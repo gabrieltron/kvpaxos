@@ -69,105 +69,13 @@ handle_sigint(int sig, short ev, void* arg)
 }
 
 static void
-on_event(struct bufferevent* bev, short ev, void *arg)
-{
-	if (ev & BEV_EVENT_EOF || ev & BEV_EVENT_ERROR) {
-		bufferevent_free(bev);
-	}
-}
-
-struct bufferevent*
-connect_to_client(unsigned long ip, unsigned short port, struct event_base* base)
-{
-	struct bufferevent* bev;
-
-	struct sockaddr_in addr;
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = ip;
-	addr.sin_port = port;
-
-	bev = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
-	bufferevent_setcb(bev, NULL, NULL, on_event, NULL);
-	bufferevent_enable(bev, EV_READ|EV_WRITE);
-	bufferevent_socket_connect(bev, (struct sockaddr*)&addr, sizeof(addr));
-	int flag = 1;
-	setsockopt(bufferevent_getfd(bev), IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(int));
-	return bev;
-}
-
-static void
-answer_client(const char* answer, size_t length, char* og_message,
-	struct event_base* base)
-{
-	auto* message = (struct client_message*)og_message;
-	auto* bev = connect_to_client(message->s_addr, message->sin_port, base);
-	bufferevent_write(bev, answer, length);
-}
-
-std::vector<std::string>
-split_string(std::string& string, char delimiter)
-{
-	std::replace(string.begin(), string.end(), delimiter, ' ');
-
-	std::vector<std::string> array;
-	std::stringstream ss(string);
-	std::string temp;
-	while (ss >> temp)
-	    array.push_back(temp);
-}
-
-static void
 deliver(unsigned iid, char* value, size_t size, void* arg)
 {
 	auto* request = (struct client_message*)value;
 	auto* args = (callback_args*) arg;
 	auto* scheduler = args->scheduler;
 	scheduler ->schedule_and_answer(*request);
-	/*
-	auto* storage = args->storage;
 
-	auto type = static_cast<request_type>(request->type);
-	auto key = request->key;
-	auto request_args = std::string(request->args);
-
-	std::string answer;
-	switch (static_cast<request_type>(request->type))
-	{
-	case READ:
-	{
-		answer = storage->read(key);
-		break;
-	}
-
-	case WRITE:
-	{
-		storage->write(key, request_args);
-		answer = request_args;
-		break;
-	}
-
-	case SCAN:
-	{
-		auto length = std::stoi(request_args);
-		auto values = storage->scan(key, length);
-
-		std::ostringstream oss;
-		std::copy(values.begin(), values.end(), std::ostream_iterator<std::string>(oss, ","));
-		answer = std::string(oss.str());
-		break;
-	}
-
-	default:
-		break;
-	}
-
-	reply_message reply;
-	reply.id = request->id;
-	strncpy(reply.answer, answer.c_str(), answer.size());
-	reply.answer[answer.size()] = 0;
-
-	answer_client((char *)&reply, sizeof(reply_message), value, args->base);
-	*/
 	args->counter_mutex->lock();
 	args->request_counter++;
 	args->counter_mutex->unlock();

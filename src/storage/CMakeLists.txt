@@ -18,4 +18,5 @@ target_link_libraries(
     storage
         PRIVATE
             types
+            CONAN_PKG::tbb
 )

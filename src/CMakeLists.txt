@@ -20,7 +20,6 @@ target_link_libraries(
             request
             evclient
             evpaxos
-            storage
             types
 )
 
@@ -37,7 +36,6 @@ target_link_libraries(
             request
             evclient
             evpaxos
-            storage
             types
             scheduler
 )
