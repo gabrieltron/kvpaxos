@@ -8,6 +8,7 @@
 #include <queue>
 #include <iterator>
 #include <mutex>
+#include <numeric>
 #include <semaphore.h>
 #include <sstream>
 #include <string>
@@ -18,6 +19,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "graph/graph.hpp"
 #include "storage/storage.h"
 #include "types/types.h"
 
@@ -125,6 +127,26 @@ private:
         close(fd);
     }
 
+    void update_graph(const std::vector<T>& data) {
+        for (auto i = 0; i < data.size(); i++) {
+            if (not workload_graph_.vertice_exists(data[i])) {
+                workload_graph_.add_vertice(data[i]);
+            }
+
+            workload_graph_.increase_vertice_weight(data[i]);
+            for (auto j = i+1; j < data.size(); j++) {
+                if (not workload_graph_.vertice_exists(data[j])) {
+                    workload_graph_.add_vertice(data[j]);
+                }
+                if (not workload_graph_.are_connected(data[i], data[j])) {
+                    workload_graph_.add_edge(data[i], data[j]);
+                }
+
+                workload_graph_.increase_edge_weight(data[i], data[j]);
+            }
+        }
+    }
+
     void thread_loop() {
         while (executing_) {
             sem_wait(&semaphore_);
@@ -147,6 +169,7 @@ private:
             case READ:
             {
                 answer = std::move(storage_.read(key));
+                update_graph(std::vector<T>{key});
                 break;
             }
 
@@ -154,6 +177,7 @@ private:
             {
                 storage_.write(key, request_args);
                 answer = request_args;
+                update_graph(std::vector<T>{key});
                 break;
             }
 
@@ -162,9 +186,14 @@ private:
                 auto length = std::stoi(request_args);
                 auto values = std::move(storage_.scan(key, length));
 
+
                 std::ostringstream oss;
                 std::copy(values.begin(), values.end(), std::ostream_iterator<std::string>(oss, ","));
                 answer = std::string(oss.str());
+
+                std::vector<T> keys(length);
+                std::iota(keys.begin(), keys.end(), 1);
+                update_graph(keys);
                 break;
             }
 
@@ -201,6 +230,7 @@ private:
 
     int id_;
     static kvstorage::Storage storage_;
+    static model::Graph<T> workload_graph_;
 
     bool executing_;
     std::thread worker_thread_;
@@ -215,6 +245,8 @@ private:
 
 template<typename T>
 kvstorage::Storage Partition<T>::storage_;
+template<typename T>
+model::Graph<T> Partition<T>::workload_graph_;
 
 }
 

@@ -20,6 +20,7 @@ target_link_libraries(
     scheduler
         PRIVATE
             evpaxos
+            graph
             storage
             request
             types
