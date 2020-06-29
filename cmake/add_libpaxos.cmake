@@ -2,9 +2,12 @@ include(ExternalProject)
 
 set (LIBPAXOS_PREFIX "${CMAKE_BINARY_DIR}/libpaxos-prefix")
 ExternalProject_Add(project_libpaxos
-    SOURCE_DIR "${CMAKE_SOURCE_DIR}/deps/libpaxos"
-    INSTALL_DIR "${LIBPAXOS_PREFIX}"
-    CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX:PATH=${LIBPAXOS_PREFIX}"
+    SOURCE_DIR
+        "${CMAKE_SOURCE_DIR}/deps/libpaxos"
+    INSTALL_DIR
+        "${LIBPAXOS_PREFIX}"
+    CMAKE_ARGS
+        "-DCMAKE_INSTALL_PREFIX:PATH=${LIBPAXOS_PREFIX}"
 )
 
 file(MAKE_DIRECTORY "${LIBPAXOS_PREFIX}/include")

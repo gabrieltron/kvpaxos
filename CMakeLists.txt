@@ -13,5 +13,6 @@ conan(
 )
 
 include(cmake/add_libpaxos.cmake)
+include(cmake/add_libkahip.cmake)
 
 add_subdirectory(src)
