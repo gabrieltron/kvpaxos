@@ -1,6 +1,6 @@
 [submodule "deps/libpaxos"]
 	path = deps/libpaxos
 	url = https://github.com/gabrieltron/libpaxos.git
-[submodule "deps/libkahip"]
-	path = deps/libkahip
+[submodule "deps/KaHIP"]
+	path = deps/KaHIP
 	url = https://github.com/KaHIP/KaHIP.git

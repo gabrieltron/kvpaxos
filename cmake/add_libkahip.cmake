@@ -3,7 +3,7 @@ include(ExternalProject)
 set (LIBKAHIP_PREFIX "${CMAKE_BINARY_DIR}/libkahip-prefix")
 ExternalProject_Add(project_libkahip
     SOURCE_DIR
-        "${CMAKE_SOURCE_DIR}/deps/libkahip"
+        "${CMAKE_SOURCE_DIR}/deps/KaHIP"
     INSTALL_DIR
         "${LIBKAHIP_PREFIX}"
     CMAKE_ARGS
