@@ -4,3 +4,6 @@
 [submodule "deps/KaHIP"]
 	path = deps/KaHIP
 	url = https://github.com/KaHIP/KaHIP.git
+[submodule "deps/METIS"]
+	path = deps/METIS
+	url = https://github.com/KarypisLab/METIS.git
