@@ -50,6 +50,7 @@
 static int verbose = 0;
 static int SLEEP = 2;
 static int N_PARTITIONS = 4;
+static int REPARTITION_INTERVAL = 1000;
 static bool RUNNING;
 
 struct callback_args {
@@ -110,7 +111,7 @@ start_replica(int id, const char* config)
 		exit(1);
 	}
 
-	kvpaxos::Scheduler<int> scheduler(N_PARTITIONS);
+	kvpaxos::Scheduler<int> scheduler(REPARTITION_INTERVAL, N_PARTITIONS);
 	scheduler.run();
 	std::mutex counter_mutex;
 	struct callback_args args;
