@@ -31,6 +31,11 @@ public:
         for (auto i = 0; i < n_partitions_; i++) {
             partitions_.emplace(i, i);
         }
+        data_to_partition_ = new std::unordered_map<T, Partition<T>*>();
+    }
+
+    ~Scheduler() {
+        delete data_to_partition_;
     }
 
     void run() {
@@ -84,7 +89,7 @@ private:
                 return std::unordered_set<Partition<T>*>();
             }
 
-            partitions.insert(data_to_partition_.at(request.key + i));
+            partitions.insert(data_to_partition_->at(request.key + i));
         }
 
         return partitions;
@@ -116,13 +121,13 @@ private:
     void add_key(T key) {
         auto partition_id = round_robin_counter_;
         partitions_.at(partition_id).insert_data(key);
-        data_to_partition_[key] = &partitions_.at(partition_id);
+        data_to_partition_->emplace(key, &partitions_.at(partition_id));
 
         round_robin_counter_ = (round_robin_counter_+1) % n_partitions_;
     }
 
     bool mapped(T key) const {
-        return data_to_partition_.find(key) != data_to_partition_.end();
+        return data_to_partition_->find(key) != data_to_partition_->end();
     }
 
     int n_partitions_;
@@ -130,7 +135,7 @@ private:
     int sync_counter_ = 0;
     kvstorage::Storage storage_;
     std::unordered_map<int, Partition<T>> partitions_;
-    std::unordered_map<T, Partition<T>*> data_to_partition_;
+    std::unordered_map<T, Partition<T>*>* data_to_partition_;
 };
 
 };
