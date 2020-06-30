@@ -52,6 +52,9 @@ public:
     int total_vertex_weight() const {return total_vertex_weight_;}
     int vertice_weight(T vertice) const {return vertex_weight_.at(vertice);}
     int edge_weight(T from, T to) const {return edges_weight_.at(from).at(to);}
+    const tbb::concurrent_unordered_map<T, int>& vertice_edges(int vertice) const {
+        return edges_weight_.at(vertice);
+    }
     const tbb::concurrent_unordered_map<T, int>& vertex() const {return vertex_weight_;}
 
 private:

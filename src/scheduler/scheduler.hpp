@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "graph/partitioning.h"
 #include "partition.hpp"
 #include "request/request.hpp"
 #include "storage/storage.h"
@@ -158,6 +159,10 @@ private:
             }
 
             // PERFORM REPARTITION HERE
+            auto& workload_graph = Partition<T>::workload_graph();
+            auto partitions = model::multilevel_cut(
+                workload_graph, partitions_.size(), model::KAHIP
+            );
             std::lock_guard<std::mutex> upd_lk(update_partition_mutex_);
             updata_data_to_partition_aux_ = data_to_partition_;
             new_partition_ready_ = true;

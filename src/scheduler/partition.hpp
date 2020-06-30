@@ -83,6 +83,10 @@ public:
         return data_set_;
     }
 
+    static const model::Graph<T>& workload_graph() {
+        return workload_graph_;
+    }
+
 private:
     void on_event(struct bufferevent* bev, short ev, void *arg)
     {
