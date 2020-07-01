@@ -87,6 +87,10 @@ public:
         return workload_graph_;
     }
 
+    static int n_executed_requests() {
+        return n_executed_requests_;
+    }
+
 private:
     void on_event(struct bufferevent* bev, short ev, void *arg)
     {
@@ -229,12 +233,17 @@ private:
             reply.answer[answer.size()] = '\0';
 
             answer_client((char *)&reply, sizeof(reply_message), request);
+
+            std::lock_guard<std::mutex> lk(executed_requests_mutex_);
+            n_executed_requests_++;
         }
     }
 
     int id_;
     static kvstorage::Storage storage_;
     static model::Graph<T> workload_graph_;
+    static int n_executed_requests_;
+    static std::mutex executed_requests_mutex_;
 
     bool executing_;
     std::thread worker_thread_;
@@ -251,6 +260,11 @@ template<typename T>
 kvstorage::Storage Partition<T>::storage_;
 template<typename T>
 model::Graph<T> Partition<T>::workload_graph_;
+template<typename T>
+int Partition<T>::n_executed_requests_ = 0;
+template<typename T>
+std::mutex Partition<T>::executed_requests_mutex_;
+
 
 }
 

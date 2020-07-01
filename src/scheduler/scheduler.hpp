@@ -84,9 +84,11 @@ public:
             arbitrary_partition->push_request(request);
         }
 
-        requests_counter_++;
         if (repartition_interval_ > 0) {
-            if (requests_counter_ % repartition_interval_ == 0) {
+            if (
+                Partition<T>::n_executed_requests() % repartition_interval_ == 0
+                and Partition<T>::n_executed_requests() > 0
+            ) {
                 repartition_cv_.notify_one();
             }
         }
@@ -177,7 +179,6 @@ private:
     std::unordered_map<int, Partition<T>> partitions_;
     std::unordered_map<T, Partition<T>*>* data_to_partition_;
 
-    int requests_counter_ = 0;
     int repartition_interval_;
     bool new_partition_ready_;
     std::thread repartition_thread_;
