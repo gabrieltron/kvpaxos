@@ -28,6 +28,10 @@ const std::unordered_map<std::string, CutMethod> string_to_cut_method({
     {"REFENNEL", REFENNEL}
 });
 
+std::vector<int> cut_graph (
+    const Graph<int>& graph, int n_paritions, CutMethod method
+);
+
 std::vector<int> multilevel_cut
     (const Graph<int>& graph, int n_partitions, CutMethod cut_method);
 std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions);

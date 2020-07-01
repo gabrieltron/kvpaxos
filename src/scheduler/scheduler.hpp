@@ -27,9 +27,12 @@ template <typename T>
 class Scheduler {
 public:
 
-    Scheduler(int repartition_interval, int n_partitions)
-        : n_partitions_{n_partitions},
+    Scheduler(int repartition_interval,
+                int n_partitions,
+                model::CutMethod repartition_method
+    ) : n_partitions_{n_partitions},
         repartition_interval_{repartition_interval},
+        repartition_method_{repartition_method},
         executing_{true},
         new_partition_ready_{false}
     {
@@ -60,6 +63,8 @@ public:
         }
         if (new_partition_ready_) {
             std::lock_guard<std::mutex> lk(update_partition_mutex_);
+            sync_all_partitions();
+            delete data_to_partition_;
             data_to_partition_ = updata_data_to_partition_aux_;
             new_partition_ready_ = false;
         }
@@ -140,6 +145,14 @@ private:
         }
     }
 
+    void sync_all_partitions() {
+        std::unordered_set<Partition<T>*> partitions;
+        for (auto i = 0; i < partitions_.size(); i++) {
+            partitions.insert(&partitions_.at(i));
+        }
+        sync_partitions(partitions);
+    }
+
     void add_key(T key) {
         auto partition_id = round_robin_counter_;
         partitions_.at(partition_id).insert_data(key);
@@ -160,13 +173,19 @@ private:
                 return;
             }
 
-            // PERFORM REPARTITION HERE
+            printf("Partitioning :)\n");
             auto& workload_graph = Partition<T>::workload_graph();
-            auto partitions = model::multilevel_cut(
-                workload_graph, partitions_.size(), model::KAHIP
+            auto partition_scheme = std::move(
+                model::cut_graph(workload_graph, partitions_.size(), repartition_method_)
             );
+
             std::lock_guard<std::mutex> upd_lk(update_partition_mutex_);
-            updata_data_to_partition_aux_ = data_to_partition_;
+            updata_data_to_partition_aux_ = new std::unordered_map<T, Partition<T>*>();
+            for (auto data = 0; data < partition_scheme.size(); data++) {
+                auto partition = partition_scheme[data];
+                updata_data_to_partition_aux_->emplace(data, &partitions_.at(partition));
+            }
+
             new_partition_ready_ = true;
         }
     }
@@ -179,6 +198,7 @@ private:
     std::unordered_map<int, Partition<T>> partitions_;
     std::unordered_map<T, Partition<T>*>* data_to_partition_;
 
+    model::CutMethod repartition_method_;
     int repartition_interval_;
     bool new_partition_ready_;
     std::thread repartition_thread_;

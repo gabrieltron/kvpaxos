@@ -10,6 +10,20 @@ static std::unordered_map<int, std::pair<int, int>> previous_info;  // maps vert
 static std::vector<std::pair<std::unordered_set<int>, int>> old_partition;
 
 
+std::vector<int> cut_graph (
+    const Graph<int>& graph, int n_paritions, CutMethod method
+) {
+    if (method == METIS) {
+        return multilevel_cut(graph, n_paritions, method);
+    } else if (method == KAHIP) {
+        return multilevel_cut(graph, n_paritions, method);
+    } else if (method == FENNEL) {
+        return fennel_cut(graph, n_paritions);
+    } else {
+        return refennel_cut(graph, n_paritions);
+    }
+}
+
 std::vector<int> multilevel_cut(
     const Graph<int>& graph, int n_partitions, CutMethod cut_method)
     {
