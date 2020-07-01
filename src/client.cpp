@@ -18,6 +18,8 @@
 const int OUTSTANDING = 1;
 const int VALUE_SIZE = 128;
 static unsigned short REPLY_PORT;
+static bool VERBOSE;
+static int PRINT_PERCENTAGE = 100;
 
 struct callback_args {
 	int request_counter;
@@ -67,10 +69,17 @@ read_reply(struct bufferevent* bev, void* args)
 
     auto delay_ns =
         std::chrono::system_clock::now() - c->sent_requests_timestamp->at(reply.id);
-    std::cout << "Client " << c->id << "; ";
-    std::cout << "Request " << reply.id << "; ";
-    std::cout << "He said " << reply.answer << "; ";
-    std::cout << "Delay " << delay_ns.count() << ";\n";
+    if (PRINT_PERCENTAGE <= rand() % 100 + 1) {
+        if (VERBOSE) {
+            std::cout << "Client " << c->id << "; ";
+            std::cout << "Request " << reply.id << "; ";
+            std::cout << "He said " << reply.answer << "; ";
+            std::cout << "Delay " << delay_ns.count() << ";\n";
+        } else {
+            std::cout << std::chrono::system_clock::now().time_since_epoch().count() << ",";
+            std::cout << delay_ns.count() << "\n";
+        }
+    }
     c->sent_requests_timestamp->erase(reply.id);
 
     c_args->request_counter++;
@@ -96,6 +105,13 @@ int main(int argc, char* argv[]) {
     auto client_id = atoi(argv[2]);
     auto client_config = std::string(argv[3]);
     auto requests_path = std::string(argv[4]);
+    if (argc < 7 and std::string(argv[5]) == "-v") {
+        VERBOSE= true;
+        PRINT_PERCENTAGE = atoi(argv[6]);
+    } else {
+        VERBOSE = false;
+    }
+    srand (time(NULL));
 
     auto* client = make_client(
         client_config.c_str(), client_id, OUTSTANDING, VALUE_SIZE,
