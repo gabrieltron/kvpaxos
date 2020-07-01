@@ -8,6 +8,7 @@
 #include <math.h>
 #include <metis.h>
 #include <string>
+#include <tbb/concurrent_unordered_map.h>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -26,28 +27,21 @@ const std::unordered_map<std::string, CutMethod> string_to_cut_method({
     {"REFENNEL", REFENNEL}
 });
 
-
 std::vector<int> multilevel_cut
     (const Graph<int>& graph, int n_partitions, CutMethod cut_method);
+std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions);
+//std::vector<int> refennel_cut(const Graph<int>& graph, int n_partitions);
 
-/*
-workload::PartitionScheme fennel_cut(Graph& graph, int n_partitions);
-workload::PartitionScheme refennel_cut(
-    Graph& graph, workload::PartitionScheme& old_partition
-);
 int fennel_inter_cost(
-    const std::unordered_map<int, int>& edges,
-    workload::Partition& partition
+    const tbb::concurrent_unordered_map<int, int>& edges,
+    const std::unordered_set<int>& vertex_in_partition
 );
 int fennel_vertice_partition(
-    Graph& graph,
-    int vertice,
-    std::vector<workload::Partition>& partitions,
+    const Graph<int>& graph, int vertice,
+    const std::vector<std::pair<std::unordered_set<int>, int>>& partitions,
     double gamma
 );
-int biggest_value_index(std::vector<double>& partitions_score);
 
-*/
 }
 
 #endif

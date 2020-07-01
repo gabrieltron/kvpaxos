@@ -62,4 +62,71 @@ std::vector<int> multilevel_cut(
     return vertex_partitions;
 }
 
+int fennel_inter_cost(
+    const tbb::concurrent_unordered_map<int, int>& edges,
+    const std::unordered_set<int>& vertex_in_partition
+) {
+    auto cost = 0;
+    for (auto& kv : edges) {
+        auto vertice = kv.first;
+        auto weight = kv.second;
+        if (vertex_in_partition.find(vertice) != vertex_in_partition.end()) {
+            cost += weight;
+        }
+    }
+    return cost;
+}
+
+int fennel_vertice_partition(
+    const Graph<int>& graph, int vertice,
+    const std::vector<std::pair<std::unordered_set<int>, int>>& partitions,
+    double gamma
+) {
+    double biggest_score = -DBL_MAX;
+    auto id = 0;
+    auto designated_partition = 0;
+    for (auto& partition : partitions) {
+        auto& partition_weight = partition.second;
+        auto& edges = graph.vertice_edges(vertice);
+
+        auto inter_cost = fennel_inter_cost(edges, partition.first);
+        auto intra_cost =
+            (std::pow(partition_weight + graph.vertice_weight(vertice), gamma));
+        intra_cost -= std::pow(partition_weight, gamma);
+        intra_cost *= gamma;
+        auto score = inter_cost - intra_cost;
+
+        if (score > biggest_score) {
+            biggest_score = score;
+            designated_partition = id;
+        }
+        id++;
+    }
+
+    return designated_partition;
+}
+
+std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions) {
+    auto partitions = std::vector<std::pair<std::unordered_set<int>, int>>();
+    for (auto i = 0; i < n_partitions; i++) {
+        // vertices there and total weight
+        partitions.emplace_back(std::unordered_set<int>(), 0);
+    }
+
+    const auto edges_weight = graph.total_edges_weight();
+    const auto vertex_weight = graph.total_vertex_weight();
+    const auto gamma = 3 / 2.0;
+    const auto alpha =
+        edges_weight * std::pow(partitions.size(), (gamma - 1)) / std::pow(graph.total_vertex_weight(), gamma);
+
+    auto final_partitioning = std::vector<int>();
+    for (auto vertice = 0; vertice < graph.vertex().size(); vertice++) {
+        auto partition = fennel_vertice_partition(graph, vertice, partitions, gamma);
+        partitions[partition].first.insert(vertice);
+        final_partitioning.emplace_back(partition);
+    }
+
+    return final_partitioning;
+}
+
 }

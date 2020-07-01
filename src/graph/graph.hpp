@@ -27,6 +27,7 @@ public:
         edges_weight_[from][to] = weight;
         edges_weight_[to][from] = weight;
         n_edges_++;
+        total_edges_weight_ += weight;
     }
 
     void increase_vertice_weight(T vertice, int value = 1) {
@@ -37,6 +38,7 @@ public:
     void increase_edge_weight(T from, T to, int value = 1) {
         edges_weight_[from][to] += value;
         edges_weight_[to][from] += value;
+        total_edges_weight_ += value;
     }
 
     bool vertice_exists(T vertice) const {
@@ -50,6 +52,7 @@ public:
     std::size_t n_vertex() const {return vertex_weight_.size();}
     std::size_t n_edges() const {return edges_weight_.size();}
     int total_vertex_weight() const {return total_vertex_weight_;}
+    int total_edges_weight() const {return total_edges_weight_;}
     int vertice_weight(T vertice) const {return vertex_weight_.at(vertice);}
     int edge_weight(T from, T to) const {return edges_weight_.at(from).at(to);}
     const tbb::concurrent_unordered_map<T, int>& vertice_edges(T vertice) const {
@@ -63,6 +66,7 @@ private:
         edges_weight_;
     int n_edges_{0};
     int total_vertex_weight_{0};
+    int total_edges_weight_{0};
 };
 
 }
