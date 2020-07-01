@@ -1,6 +1,7 @@
 #ifndef MODEL_PARTITIONING_H
 #define MODEL_PARTITIONING_H
 
+
 #include <algorithm>
 #include <float.h>
 #include <fstream>
@@ -30,7 +31,7 @@ const std::unordered_map<std::string, CutMethod> string_to_cut_method({
 std::vector<int> multilevel_cut
     (const Graph<int>& graph, int n_partitions, CutMethod cut_method);
 std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions);
-//std::vector<int> refennel_cut(const Graph<int>& graph, int n_partitions);
+std::vector<int> refennel_cut(const Graph<int>& graph, int n_partitions);
 
 int fennel_inter_cost(
     const tbb::concurrent_unordered_map<int, int>& edges,

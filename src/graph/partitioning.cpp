@@ -3,6 +3,13 @@
 
 namespace model {
 
+
+// used during refennel
+static std::unordered_map<int, std::pair<int, int>> previous_info;  // maps vertice to
+                                                                    // prev part and weight
+static std::vector<std::pair<std::unordered_set<int>, int>> old_partition;
+
+
 std::vector<int> multilevel_cut(
     const Graph<int>& graph, int n_partitions, CutMethod cut_method)
     {
@@ -123,10 +130,49 @@ std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions) {
     for (auto vertice = 0; vertice < graph.vertex().size(); vertice++) {
         auto partition = fennel_vertice_partition(graph, vertice, partitions, gamma);
         partitions[partition].first.insert(vertice);
+        partitions[partition].second += graph.vertice_weight(vertice);
         final_partitioning.emplace_back(partition);
     }
 
     return final_partitioning;
+}
+
+std::vector<int> refennel_cut(const Graph<int>& graph, int n_partitions) {
+    if (old_partition.empty()) {
+        for (auto i = 0; i < n_partitions; i++) {
+            old_partition.emplace_back(std::unordered_set<int>(), 0);
+        }
+    }
+
+    const auto edges_weight = graph.total_edges_weight();
+    const auto vertex_weight = graph.total_vertex_weight();
+    const auto gamma = 3 / 2.0;
+    const auto alpha =
+        edges_weight * std::pow(old_partition.size(), (gamma - 1)) / std::pow(graph.total_vertex_weight(), gamma);
+
+    auto final_partitioning = std::vector<int>();
+    for (auto vertice = 0; vertice < graph.vertex().size(); vertice++) {
+        auto new_partition = fennel_vertice_partition(
+            graph, vertice, old_partition, gamma
+        );
+
+        if (previous_info.find(vertice) != previous_info.end()) {
+            auto old_partition_id = previous_info[vertice].first;
+            auto previous_weight = previous_info[vertice].second;
+            old_partition[old_partition_id].first.erase(vertice);
+            old_partition[old_partition_id].second -= previous_weight;
+        }
+
+        auto weight = graph.vertice_weight(vertice);
+        old_partition[new_partition].first.insert(vertice);
+        old_partition[new_partition].second += weight;
+        previous_info[vertice] = std::make_pair(new_partition, weight);
+
+        final_partitioning.push_back(new_partition);
+    }
+
+    return final_partitioning;
+
 }
 
 }
