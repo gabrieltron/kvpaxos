@@ -69,7 +69,7 @@ read_reply(struct bufferevent* bev, void* args)
 
     auto delay_ns =
         std::chrono::system_clock::now() - c->sent_requests_timestamp->at(reply.id);
-    if (PRINT_PERCENTAGE <= rand() % 100 + 1) {
+    if (PRINT_PERCENTAGE >= rand() % 100 + 1) {
         if (VERBOSE) {
             std::cout << "Client " << c->id << "; ";
             std::cout << "Request " << reply.id << "; ";
