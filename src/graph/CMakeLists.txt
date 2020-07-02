@@ -12,9 +12,8 @@ target_sources(
 
 target_link_libraries(
     graph
-        PRIVATE
+        PUBLIC
             CONAN_PKG::tbb
             metis
-        PUBLIC
             kahip
 )
