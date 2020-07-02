@@ -173,7 +173,6 @@ private:
                 return;
             }
 
-            printf("Partitioning :)\n");
             auto& workload_graph = Partition<T>::workload_graph();
             auto partition_scheme = std::move(
                 model::cut_graph(workload_graph, partitions_.size(), repartition_method_)

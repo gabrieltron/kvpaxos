@@ -30,6 +30,7 @@
 #include <evpaxos/paxos.h>
 
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <iterator>
 #include <stdlib.h>
@@ -93,7 +94,8 @@ print_throughput(int sleep_duration, int& counter, std::mutex& counter_mutex)
 			auto throughput = counter;
 			counter = 0;
 		counter_mutex.unlock();
-		std::cout << "Answered " << throughput << " requests.\n";
+		std::cout << std::chrono::system_clock::now().time_since_epoch().count() << ",";
+		std::cout << throughput << "\n";
 	}
 }
 
