@@ -43,7 +43,7 @@ The arguments are:
 The client is started as follows:
 
 ```
-    ./client reply_port replica_id path_to_paxos_conf path_to_requests [-v percentage]
+    ./client reply_port replica_id path_to_paxos_conf path_to_requests (-v|percentage)
 ```
 
 The arguments are:
@@ -51,7 +51,8 @@ The arguments are:
 * replica_id - Id of the replica that the client will connect to.
 * path_to_paxos_conf - Path to paxo's configuration file.
 * path_to_requests - Path to request's file.
-* -v percentage - Tells the client to print latency information, but only for a specified percentage of requests.
+* -v - Print full information of all recieved answers.
+* percentage - Print this specified percentage of request's latency.
 
 A paxos configuration file specifies Paxos characteristics, such as number of replicas and their addresses. An exemple of a configuration file can be found on the LibPaxos project, [here](https://github.com/gabrieltron/libpaxos/blob/master/paxos.conf).
 

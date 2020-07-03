@@ -96,11 +96,11 @@ read_reply(struct bufferevent* bev, void* args)
 }
 
 void usage(std::string name) {
-    std::cout << "Usage: " << name << " port id client_config request_config\n";
+    std::cout << "Usage: " << name << " port id client_config request_config (-v|percentage)\n";
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 5) {
+    if (argc < 6) {
         usage(std::string(argv[0]));
         exit(1);
     }
@@ -109,11 +109,11 @@ int main(int argc, char* argv[]) {
     auto client_id = atoi(argv[2]);
     auto client_config = std::string(argv[3]);
     auto requests_path = std::string(argv[4]);
-    if (argc < 7 and std::string(argv[5]) == "-v") {
+    if (std::string(argv[5]) == "-v") {
         VERBOSE= true;
-        PRINT_PERCENTAGE = atoi(argv[6]);
     } else {
         VERBOSE = false;
+        PRINT_PERCENTAGE = atoi(argv[5]);
     }
     srand (time(NULL));
 
