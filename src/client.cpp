@@ -67,6 +67,10 @@ read_reply(struct bufferevent* bev, void* args)
     reply_message reply;
     bufferevent_read(bev, &reply, sizeof(reply_message));
 
+    if (c->sent_requests_timestamp->find(reply.id) == c->sent_requests_timestamp->end()) {
+        // already recieved an answer for this request.
+        return;
+    }
     auto delay_ns =
         std::chrono::system_clock::now() - c->sent_requests_timestamp->at(reply.id);
     if (PRINT_PERCENTAGE >= rand() % 100 + 1) {
