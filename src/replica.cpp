@@ -100,7 +100,7 @@ print_throughput(int sleep_duration, int& counter, std::mutex& counter_mutex)
 }
 
 static void
-start_replica(int id, const char* config)
+start_replica(int id, std::string config)
 {
 	struct event* sig;
 	struct event_base* base;
@@ -109,7 +109,7 @@ start_replica(int id, const char* config)
 	RUNNING = true;
 
 	base = event_base_new();
-	replica = evpaxos_replica_init(id, config, cb, NULL, base);
+	replica = evpaxos_replica_init(id, config.c_str(), cb, NULL, base);
 	if (replica == NULL) {
 		printf("Could not start the replica!\n");
 		exit(1);
@@ -146,42 +146,19 @@ start_replica(int id, const char* config)
 static void
 usage(std::string prog)
 {
-	std::cout << "Usage: " << prog << " id [path/to/paxos.conf] [-h] [-v]\n";
-	std::cout << "-h, --help Output this message and exit";
-	std::cout << "-v, --verbose Print delivered messages";
+	std::cout << "Usage: " << prog << " id path/to/paxos.conf\n";
 }
 
 int
 main(int argc, char const *argv[])
 {
-	int id;
-	int i = 2;
-	const char* config = "../paxos.conf";
-
-	if (argc < 2) {
+	if (argc < 3) {
 		usage(std::string(argv[0]));
 		exit(1);
 	}
 
-	id = atoi(argv[1]);
-	if (argc >= 3 && argv[2][0] != '-') {
-		config = argv[2];
-		i++;
-	}
-
-	while (i != argc) {
-		auto arg = std::string(argv[i]);
-		if (arg == "-h" || arg == "--help") {
-			usage(arg);
-			exit(1);
-		} else if (arg == "-v" || arg == "--verbose") {
-			verbose = 1;
-		} else {
-			usage(arg);
-			exit(1);
-		}
-		i++;
-	}
+	auto id = atoi(argv[1]);
+	auto config = std::string(argv[2]);
 
 	start_replica(id, config);
 
