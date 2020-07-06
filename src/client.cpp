@@ -5,8 +5,10 @@
 #include <event2/listener.h>
 #include <iostream>
 #include <netinet/tcp.h>
+#include <tbb/concurrent_unordered_map.h>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <sstream>
 #include <string>
@@ -21,10 +23,21 @@ static unsigned short REPLY_PORT;
 static bool VERBOSE;
 static int PRINT_PERCENTAGE = 100;
 
+struct dispatch_requests_args {
+    client* c;
+    std::vector<workload::Request>* requests;
+};
+
+struct client_args {
+    tbb::concurrent_unordered_map<int, time_point>* sent_timestamp;
+    std::unordered_set<int>* answered_requests;
+};
+
 
 static void
 send_requests(client* c, const std::vector<workload::Request>& requests)
 {
+    auto* client_args = (struct client_args *) c->args;
 	auto* v = (struct client_message*)c->send_buffer;
     v->sin_port = htons(REPLY_PORT);
 
@@ -48,25 +61,42 @@ send_requests(client* c, const std::vector<workload::Request>& requests)
         auto size = sizeof(struct client_message) + v->size;
         auto timestamp = std::chrono::system_clock::now();
         auto kv = std::make_pair(v->id, timestamp);
-        c->sent_requests_timestamp->insert(kv);
+        client_args->sent_timestamp->insert(kv);
+        bufferevent_lock(c->bev);
         paxos_submit(c->bev, c->send_buffer, size);
+        bufferevent_unlock(c->bev);
         counter++;
     }
+}
+
+static void
+dispatch_requests_thread(evutil_socket_t fd, short event, void *arg)
+{
+    auto* dispatch_args = (dispatch_requests_args *)arg;
+    auto* requests = (std::vector<workload::Request>*) dispatch_args->requests;
+    auto* client = dispatch_args->c;
+    std::thread send_requests_thread(send_requests, client, std::ref(*requests));
+    send_requests_thread.detach();
 }
 
 static void
 read_reply(struct bufferevent* bev, void* args)
 {
     auto* c = (client *)args;
+    auto* client_args = (struct client_args *) c->args;
+    auto* answered_requests = client_args->answered_requests;
+    auto* sent_timestamp = client_args->sent_timestamp;
     reply_message reply;
+    bufferevent_lock(bev);
     bufferevent_read(bev, &reply, sizeof(reply_message));
+    bufferevent_unlock(bev);
 
-    if (c->sent_requests_timestamp->find(reply.id) == c->sent_requests_timestamp->end()) {
+    if (answered_requests->find(reply.id) != answered_requests->end()) {
         // already recieved an answer for this request.
         return;
     }
     auto delay_ns =
-        std::chrono::system_clock::now() - c->sent_requests_timestamp->at(reply.id);
+        std::chrono::system_clock::now() - sent_timestamp->at(reply.id);
     if (PRINT_PERCENTAGE >= rand() % 100 + 1) {
         if (VERBOSE) {
             std::cout << "Client " << c->id << "; ";
@@ -78,7 +108,7 @@ read_reply(struct bufferevent* bev, void* args)
             std::cout << delay_ns.count() << "\n";
         }
     }
-    c->sent_requests_timestamp->erase(reply.id);
+    answered_requests->insert(reply.id);
 }
 
 void usage(std::string name) {
@@ -109,10 +139,24 @@ int main(int argc, char* argv[]) {
     );
 	signal(SIGPIPE, SIG_IGN);
 
-    auto requests = std::move(workload::import_requests(requests_path, "requests"));
-    send_requests(client, requests);
-	event_base_dispatch(client->base);
+    struct client_args client_args;
+    std::unordered_set<int> answered_requests;
+    tbb::concurrent_unordered_map<int, time_point> sent_timestamp;
+    client_args.answered_requests = &answered_requests;
+    client_args.sent_timestamp = &sent_timestamp;
+    client->args = &client_args;
 
+    auto requests = std::move(workload::import_requests(requests_path, "requests"));
+    dispatch_requests_args dispatch_args;
+    dispatch_args.c = client;
+    dispatch_args.requests = &requests;
+	auto time = (struct timeval){1, 0};
+	auto send_event = evtimer_new(
+        client->base, dispatch_requests_thread, &dispatch_args
+    );
+	event_add(send_event, &time);
+
+	event_base_dispatch(client->base);
     client_free(client);
 
     return 0;

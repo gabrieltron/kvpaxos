@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <event2/event.h>
 #include <event2/listener.h>
+#include <event2/thread.h>
 #include <evpaxos.h>
 #include <stdlib.h>
 #include <time.h>

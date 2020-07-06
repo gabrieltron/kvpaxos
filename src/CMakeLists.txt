@@ -17,6 +17,7 @@ target_sources(
 target_link_libraries(
     client
         PRIVATE
+            CONAN_PKG::tbb
             CONAN_PKG::toml11
             request
             evclient
