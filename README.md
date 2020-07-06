@@ -33,12 +33,13 @@ Help would be appreciated in order to make Conan include those packages and link
 Inside the build folder, a folder `bin` will have the two executables, the replica and the client. The replica is started as follows:
 
 ```
-    ./replica id path_to_paxos_conf
+    ./replica id path_to_paxos_conf [path_to_load_requests]
 ```
 
 The arguments are:
 * id - Replica's id.
 * path_to_paxos_conf - Path to paxo's configuration file.
+* path_to_load_requests - Path to a toml file containing request to be used in storage load phase.
 
 The client is started as follows:
 

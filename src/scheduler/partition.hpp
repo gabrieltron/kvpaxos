@@ -20,6 +20,7 @@
 #include <unordered_set>
 
 #include "graph/graph.hpp"
+#include "request/request.hpp"
 #include "storage/storage.h"
 #include "types/types.h"
 
@@ -39,6 +40,16 @@ public:
         if (worker_thread_.joinable()) {
             sem_post(&semaphore_);
             worker_thread_.join();
+        }
+    }
+
+    static void populate_storage(const std::vector<workload::Request>& requests) {
+        for (auto& request : requests) {
+            if (request.type() != WRITE) {
+                continue;
+            }
+
+            storage_.write(request.key(), request.args());
         }
     }
 

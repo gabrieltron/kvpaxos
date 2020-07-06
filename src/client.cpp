@@ -21,11 +21,6 @@ static unsigned short REPLY_PORT;
 static bool VERBOSE;
 static int PRINT_PERCENTAGE = 100;
 
-struct callback_args {
-	int request_counter;
-    int n_load_requests;
-    std::string path;
-};
 
 static void
 send_requests(client* c, const std::vector<workload::Request>& requests)
@@ -63,7 +58,6 @@ static void
 read_reply(struct bufferevent* bev, void* args)
 {
     auto* c = (client *)args;
-    auto* c_args = (struct callback_args *) c->args;
     reply_message reply;
     bufferevent_read(bev, &reply, sizeof(reply_message));
 
@@ -85,14 +79,6 @@ read_reply(struct bufferevent* bev, void* args)
         }
     }
     c->sent_requests_timestamp->erase(reply.id);
-
-    c_args->request_counter++;
-    if (c_args->request_counter == c_args->n_load_requests) {
-        auto requests = std::move(workload::import_requests(
-            c_args->path, "requests"
-        ));
-        send_requests(c, requests);
-    }
 }
 
 void usage(std::string name) {
@@ -123,13 +109,7 @@ int main(int argc, char* argv[]) {
     );
 	signal(SIGPIPE, SIG_IGN);
 
-    struct callback_args args;
-    args.request_counter = 0;
-    args.path = requests_path;
-    client->args = &args;
-
-    auto requests = std::move(workload::import_requests(requests_path, "load_requests"));
-    args.n_load_requests = requests.size();
+    auto requests = std::move(workload::import_requests(requests_path, "requests"));
     send_requests(client, requests);
 	event_base_dispatch(client->base);
 

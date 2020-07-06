@@ -44,6 +44,7 @@
 #include <netinet/tcp.h>
 #include <vector>
 
+#include "request/request_generation.h"
 #include "types/types.h"
 #include "scheduler/scheduler.hpp"
 #include "graph/graph.hpp"
@@ -100,7 +101,7 @@ print_throughput(int sleep_duration, int& counter, std::mutex& counter_mutex)
 }
 
 static void
-start_replica(int id, std::string config)
+start_replica(int id, std::string config, std::string initial_requests = std::string(""))
 {
 	struct event* sig;
 	struct event_base* base;
@@ -118,7 +119,14 @@ start_replica(int id, std::string config)
 	kvpaxos::Scheduler<int> scheduler(
 		REPARTITION_INTERVAL, N_PARTITIONS, CUT_METHOD
 	);
+	if (not initial_requests.empty()) {
+		auto populate_requests = std::move(
+			workload::import_requests(initial_requests, "load_requests")
+		);
+		scheduler.process_populate_requests(populate_requests);
+	}
 	scheduler.run();
+
 	std::mutex counter_mutex;
 	struct callback_args args;
 	args.base = base;
@@ -146,7 +154,7 @@ start_replica(int id, std::string config)
 static void
 usage(std::string prog)
 {
-	std::cout << "Usage: " << prog << " id path/to/paxos.conf\n";
+	std::cout << "Usage: " << prog << " id path/to/paxos.conf [path/to/load/requests.toml]\n";
 }
 
 int
@@ -159,8 +167,12 @@ main(int argc, char const *argv[])
 
 	auto id = atoi(argv[1]);
 	auto config = std::string(argv[2]);
+	std::string populate_requests_path;
+	if (argc >= 4) {
+		populate_requests_path = std::string(argv[3]);
+	}
 
-	start_replica(id, config);
+	start_replica(id, config, populate_requests_path);
 
 	return 0;
 }

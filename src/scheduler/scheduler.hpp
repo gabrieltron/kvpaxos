@@ -50,6 +50,13 @@ public:
         delete data_to_partition_;
     }
 
+    void process_populate_requests(const std::vector<workload::Request>& requests) {
+        for (auto& request : requests) {
+            add_key(request.key());
+        }
+        Partition<T>::populate_storage(requests);
+    }
+
     void run() {
         for (auto& kv : partitions_) {
             kv.second.start_worker_thread();
