@@ -49,6 +49,15 @@ public:
         return edges_weight_.at(vertice_a).find(vertice_b) != edges_weight_.at(vertice_a).end();
     }
 
+    std::vector<T> sorted_vertex() const {
+        std::vector<T> sorted_vertex_;
+        for (auto& it : vertex_weight_) {
+            sorted_vertex_.emplace_back(it.first);
+        }
+        std::sort(sorted_vertex_.begin(), sorted_vertex_.end());
+        return sorted_vertex_;
+    }
+
     std::size_t n_vertex() const {return vertex_weight_.size();}
     std::size_t n_edges() const {return edges_weight_.size();}
     int total_vertex_weight() const {return total_vertex_weight_;}

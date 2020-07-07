@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <queue>
 #include <semaphore.h>
+#include <shared_mutex>
 #include <string>
 #include <string.h>
 #include <thread>
@@ -32,21 +33,19 @@ public:
                 model::CutMethod repartition_method
     ) : n_partitions_{n_partitions},
         repartition_interval_{repartition_interval},
-        repartition_method_{repartition_method},
-        executing_{true},
-        new_partition_ready_{false}
+        repartition_method_{repartition_method}
     {
         for (auto i = 0; i < n_partitions_; i++) {
             partitions_.emplace(i, i);
         }
         data_to_partition_ = new std::unordered_map<T, Partition<T>*>();
+
+        pthread_barrier_init(&start_repartition_barrier_, NULL, 2);
+        pthread_barrier_init(&finish_repartition_barrier_, NULL, 2);
         repartition_thread_ = std::thread(&Scheduler<T>::repartition_data_, this);
     }
 
     ~Scheduler() {
-        executing_ = false;
-        repartition_cv_.notify_one();
-        repartition_thread_.join();
         delete data_to_partition_;
     }
 
@@ -68,13 +67,7 @@ public:
         if (type == SYNC) {
             return;
         }
-        if (new_partition_ready_) {
-            std::lock_guard<std::mutex> lk(update_partition_mutex_);
-            sync_all_partitions();
-            delete data_to_partition_;
-            data_to_partition_ = updata_data_to_partition_aux_;
-            new_partition_ready_ = false;
-        }
+
         if (type == WRITE) {
             if (not mapped(request.key)) {
                 add_key(request.key);
@@ -96,12 +89,16 @@ public:
             arbitrary_partition->push_request(request);
         }
 
+        n_dispatched_requests_++;
         if (repartition_interval_ > 0) {
             if (
-                Partition<T>::n_executed_requests() % repartition_interval_ == 0
-                and Partition<T>::n_executed_requests() > 0
+                n_dispatched_requests_ % repartition_interval_ == 0
             ) {
-                repartition_cv_.notify_one();
+                auto& execution_mutex = Partition<T>::execution_mutex();
+                std::unique_lock lock(execution_mutex);
+
+                pthread_barrier_wait(&start_repartition_barrier_);
+                pthread_barrier_wait(&finish_repartition_barrier_);
             }
         }
     }
@@ -173,44 +170,43 @@ private:
     }
 
     void repartition_data_() {
-        while (executing_) {
-            std::unique_lock<std::mutex> lk(repartition_mutex_);
-            repartition_cv_.wait(lk);
-            if (not executing_) {
-                return;
-            }
+        while (true) {
+            pthread_barrier_wait(&start_repartition_barrier_);
 
             auto& workload_graph = Partition<T>::workload_graph();
             auto partition_scheme = std::move(
                 model::cut_graph(workload_graph, partitions_.size(), repartition_method_)
             );
 
-            std::lock_guard<std::mutex> upd_lk(update_partition_mutex_);
-            updata_data_to_partition_aux_ = new std::unordered_map<T, Partition<T>*>();
-            for (auto data = 0; data < partition_scheme.size(); data++) {
-                auto partition = partition_scheme[data];
-                updata_data_to_partition_aux_->emplace(data, &partitions_.at(partition));
+            delete data_to_partition_;
+            data_to_partition_ = new std::unordered_map<T, Partition<T>*>();
+            auto sorted_vertex = std::move(workload_graph.sorted_vertex());
+            for (auto i = 0; i < partition_scheme.size(); i++) {
+                auto partition = partition_scheme[i];
+                if (partition >= n_partitions_) {
+                    printf("ERROR: partition was %d!\n", partition);
+                    fflush(stdout);
+                }
+                auto data = sorted_vertex[i];
+                data_to_partition_->emplace(data, &partitions_.at(partition));
             }
 
-            new_partition_ready_ = true;
+            pthread_barrier_wait(&finish_repartition_barrier_);
         }
     }
 
     int n_partitions_;
     int round_robin_counter_ = 0;
     int sync_counter_ = 0;
-    bool executing_;
+    int n_dispatched_requests_ = 0;
     kvstorage::Storage storage_;
     std::unordered_map<int, Partition<T>> partitions_;
     std::unordered_map<T, Partition<T>*>* data_to_partition_;
 
     model::CutMethod repartition_method_;
     int repartition_interval_;
-    bool new_partition_ready_;
     std::thread repartition_thread_;
-    std::condition_variable repartition_cv_;
-    std::mutex repartition_mutex_, update_partition_mutex_;
-    std::unordered_map<T, Partition<T>*>* updata_data_to_partition_aux_;
+    pthread_barrier_t start_repartition_barrier_, finish_repartition_barrier_;
 };
 
 };

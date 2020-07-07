@@ -11,6 +11,7 @@
 #include <numeric>
 #include <semaphore.h>
 #include <sstream>
+#include <shared_mutex>
 #include <string>
 #include <string.h>
 #include <sys/socket.h>
@@ -50,6 +51,7 @@ public:
             }
 
             storage_.write(request.key(), request.args());
+            workload_graph_.add_vertice(request.key());
         }
     }
 
@@ -100,6 +102,10 @@ public:
 
     static int n_executed_requests() {
         return n_executed_requests_;
+    }
+
+    static std::shared_mutex& execution_mutex() {
+        return execution_mutex_;
     }
 
 private:
@@ -172,6 +178,7 @@ private:
             if (not executing_) {
                 return;
             }
+            std::shared_lock lock(execution_mutex_);
 
             queue_mutex_.lock();
                 auto request = std::move(requests_queue_.front());
@@ -261,6 +268,7 @@ private:
     sem_t semaphore_;
     std::queue<struct client_message> requests_queue_;
     std::mutex queue_mutex_;
+    static std::shared_mutex execution_mutex_;
 
     int total_weight_ = 0;
     std::unordered_set<T> data_set_;
@@ -275,7 +283,8 @@ template<typename T>
 int Partition<T>::n_executed_requests_ = 0;
 template<typename T>
 std::mutex Partition<T>::executed_requests_mutex_;
-
+template<typename T>
+std::shared_mutex Partition<T>::execution_mutex_;
 
 }
 

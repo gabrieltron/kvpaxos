@@ -25,17 +25,16 @@ std::vector<int> cut_graph (
 }
 
 std::vector<int> multilevel_cut(
-    const Graph<int>& graph, int n_partitions, CutMethod cut_method)
-    {
-
+    const Graph<int>& graph, int n_partitions, CutMethod cut_method
+)
+{
     auto& vertex = graph.vertex();
-    int n_vertice = vertex.size();
-    int n_edges = n_vertice * (n_vertice - 1);
+    auto sorted_vertex = std::move(graph.sorted_vertex());
     int n_constrains = 1;
 
     auto vertice_weight = std::vector<int>();
-    for (auto i = 0; i < vertex.size(); i++) {
-        vertice_weight.push_back(vertex.at(i));
+    for (auto& vertice : sorted_vertex) {
+        vertice_weight.push_back(vertex.at(vertice));
     }
 
     auto x_edges = std::vector<int>();
@@ -43,7 +42,7 @@ std::vector<int> multilevel_cut(
     auto edges_weight = std::vector<int>();
 
     x_edges.push_back(0);
-    for (auto vertice = 0; vertice < vertex.size(); vertice++) {
+    for (auto& vertice : sorted_vertex) {
         auto last_edge_index = x_edges.back();
         auto n_neighbours = graph.vertice_edges(vertice).size();
         x_edges.push_back(last_edge_index + n_neighbours);
@@ -63,17 +62,18 @@ std::vector<int> multilevel_cut(
     options[METIS_OPTION_UFACTOR] = 200;
 
     int objval;
-    auto vertex_partitions = std::vector<int>(n_vertice, 0);
+    int n_vertex = vertice_weight.size();
+    auto vertex_partitions = std::vector<int>(n_vertex, 0);
     if (cut_method == METIS) {
         METIS_PartGraphKway(
-            &n_vertice, &n_constrains, x_edges.data(), edges.data(),
+            &n_vertex, &n_constrains, x_edges.data(), edges.data(),
             vertice_weight.data(), NULL, edges_weight.data(), &n_partitions, NULL,
             NULL, options, &objval, vertex_partitions.data()
         );
     } else {
         double imbalance = 0.2;  // equal to METIS default imbalance
         kaffpa(
-            &n_vertice, vertice_weight.data(), x_edges.data(),
+            &n_vertex, vertice_weight.data(), x_edges.data(),
             edges_weight.data(), edges.data(), &n_partitions,
             &imbalance, true, -1, FAST, &objval,
             vertex_partitions.data()
@@ -141,7 +141,9 @@ std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions) {
         edges_weight * std::pow(partitions.size(), (gamma - 1)) / std::pow(graph.total_vertex_weight(), gamma);
 
     auto final_partitioning = std::vector<int>();
-    for (auto vertice = 0; vertice < graph.vertex().size(); vertice++) {
+    auto& vertex = graph.vertex();
+    auto sorted_vertex = std::move(graph.sorted_vertex());
+    for (auto& vertice : sorted_vertex) {
         auto partition = fennel_vertice_partition(graph, vertice, partitions, gamma);
         partitions[partition].first.insert(vertice);
         partitions[partition].second += graph.vertice_weight(vertice);
@@ -165,7 +167,9 @@ std::vector<int> refennel_cut(const Graph<int>& graph, int n_partitions) {
         edges_weight * std::pow(old_partition.size(), (gamma - 1)) / std::pow(graph.total_vertex_weight(), gamma);
 
     auto final_partitioning = std::vector<int>();
-    for (auto vertice = 0; vertice < graph.vertex().size(); vertice++) {
+    auto& vertex = graph.vertex();
+    auto sorted_vertex = std::move(graph.sorted_vertex());
+    for (auto& vertice : sorted_vertex) {
         auto new_partition = fennel_vertice_partition(
             graph, vertice, old_partition, gamma
         );
