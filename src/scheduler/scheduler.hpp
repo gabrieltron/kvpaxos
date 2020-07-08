@@ -62,6 +62,10 @@ public:
         }
     }
 
+    int n_executed_requests() {
+        return Partition<T>::n_executed_requests();
+    }
+
     void schedule_and_answer(struct client_message& request) {
         auto type = static_cast<request_type>(request.type);
         if (type == SYNC) {

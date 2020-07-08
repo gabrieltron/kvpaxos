@@ -80,23 +80,18 @@ deliver(unsigned iid, char* value, size_t size, void* arg)
 	auto* args = (callback_args*) arg;
 	auto* scheduler = args->scheduler;
 	scheduler ->schedule_and_answer(*request);
-
-	args->counter_mutex->lock();
-	args->request_counter++;
-	args->counter_mutex->unlock();
 }
 
 void
-print_throughput(int sleep_duration, int& counter, std::mutex& counter_mutex)
+print_throughput(int sleep_duration, kvpaxos::Scheduler<int>& scheduler)
 {
+	auto already_counted = 0;
 	while (RUNNING) {
-		std::this_thread::sleep_for(std::chrono::seconds(sleep_duration));
-		counter_mutex.lock();
-			auto throughput = counter;
-			counter = 0;
-		counter_mutex.unlock();
+		std::this_thread::sleep_for(std::chrono::seconds(2));
+		auto throughput = scheduler.n_executed_requests() - already_counted;
 		std::cout << std::chrono::system_clock::now().time_since_epoch().count() << ",";
 		std::cout << throughput << "\n";
+		already_counted += throughput;
 	}
 }
 
@@ -136,7 +131,7 @@ start_replica(int id, std::string config, std::string initial_requests = std::st
 	replica->arg = &args;
 
 	std::thread throughput_thread(
-		print_throughput, SLEEP, std::ref(args.request_counter), std::ref(counter_mutex)
+		print_throughput, SLEEP, std::ref(scheduler)
 	);
 
 	sig = evsignal_new(base, SIGINT, handle_sigint, base);
