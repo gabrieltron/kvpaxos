@@ -2,7 +2,9 @@
 #define MODEL_GRAPH_H
 
 
+#include <algorithm>
 #include <tbb/concurrent_unordered_map.h>
+#include <vector>
 
 
 namespace model {
