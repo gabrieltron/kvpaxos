@@ -10,6 +10,7 @@ add_library(
 )
 
 # Enable the latest complete C++ standard.
+set (CMAKE_CXX_STANDARD 17)
 target_compile_features(
     project_options
         INTERFACE
