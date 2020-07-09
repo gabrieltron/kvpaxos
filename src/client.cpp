@@ -19,9 +19,10 @@
 
 const int OUTSTANDING = 1;
 const int VALUE_SIZE = 128;
-static unsigned short REPLY_PORT;
-static bool VERBOSE;
-static int PRINT_PERCENTAGE = 100;
+
+using toml_config = toml::basic_value<
+	toml::discard_comments, std::unordered_map, std::vector
+>;
 
 struct dispatch_requests_args {
     client* c;
@@ -29,6 +30,9 @@ struct dispatch_requests_args {
 };
 
 struct client_args {
+    bool verbose;
+    int print_percentage;
+    unsigned short reply_port;
     tbb::concurrent_unordered_map<int, time_point>* sent_timestamp;
     std::unordered_set<int>* answered_requests;
 };
@@ -39,7 +43,7 @@ send_requests(client* c, const std::vector<workload::Request>& requests)
 {
     auto* client_args = (struct client_args *) c->args;
 	auto* v = (struct client_message*)c->send_buffer;
-    v->sin_port = htons(REPLY_PORT);
+    v->sin_port = htons(client_args->reply_port);
 
     auto counter = 0;
     for (auto& request: requests) {
@@ -97,8 +101,8 @@ read_reply(struct bufferevent* bev, void* args)
     }
     auto delay_ns =
         std::chrono::system_clock::now() - sent_timestamp->at(reply.id);
-    if (PRINT_PERCENTAGE >= rand() % 100 + 1) {
-        if (VERBOSE) {
+    if (client_args->print_percentage >= rand() % 100 + 1) {
+        if (client_args->verbose) {
             std::cout << "Client " << c->id << "; ";
             std::cout << "Request " << reply.id << "; ";
             std::cout << "He said " << reply.answer << "; ";
@@ -116,36 +120,48 @@ void usage(std::string name) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 6) {
+    if (argc < 3) {
         usage(std::string(argv[0]));
         exit(1);
     }
 
-    REPLY_PORT = atoi(argv[1]);
-    auto client_id = atoi(argv[2]);
-    auto client_config = std::string(argv[3]);
-    auto requests_path = std::string(argv[4]);
-    if (std::string(argv[5]) == "-v") {
-        VERBOSE= true;
+    auto reply_port = atoi(argv[1]);
+    const auto config = toml::parse(argv[2]);
+    bool verbose;
+    if (argc >= 4 and std::string(argv[3]) == "-v") {
+        verbose = true;
     } else {
-        VERBOSE = false;
-        PRINT_PERCENTAGE = atoi(argv[5]);
+        verbose = false;
     }
     srand (time(NULL));
 
+    auto paxos_config = toml::find<std::string>(
+        config, "paxos_config"
+    );
+    auto proposer_id = toml::find<int>(
+        config, "proposer_id"
+    );
     auto* client = make_client(
-        client_config.c_str(), client_id, OUTSTANDING, VALUE_SIZE,
-        REPLY_PORT, nullptr, read_reply
+        paxos_config.c_str(), proposer_id, OUTSTANDING, VALUE_SIZE,
+        reply_port, nullptr, read_reply
     );
 	signal(SIGPIPE, SIG_IGN);
 
     struct client_args client_args;
+    client_args.verbose = verbose;
+    client_args.print_percentage = toml::find<int>(
+        config, "print_percentage"
+    );
+    client_args.reply_port = reply_port;
     std::unordered_set<int> answered_requests;
     tbb::concurrent_unordered_map<int, time_point> sent_timestamp;
     client_args.answered_requests = &answered_requests;
     client_args.sent_timestamp = &sent_timestamp;
     client->args = &client_args;
 
+    auto requests_path = toml::find<std::string>(
+        config, "requests_path"
+    );
     auto requests = std::move(workload::import_requests(requests_path, "requests"));
     dispatch_requests_args dispatch_args;
     dispatch_args.c = client;
