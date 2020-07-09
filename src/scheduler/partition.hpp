@@ -116,35 +116,29 @@ private:
         }
     }
 
-    int connect_to_client(unsigned long ip, unsigned short port)
+    struct sockaddr_in get_client_addr(unsigned long ip, unsigned short port)
     {
-        auto fd = socket(AF_INET, SOCK_STREAM, 0);
-        if (fd < 0) {
-            printf("Failed to create socket.\n");
-            return -1;
-        }
         struct sockaddr_in addr;
         addr.sin_family = AF_INET;
         addr.sin_addr.s_addr = ip;
         addr.sin_port = port;
-        auto failed = connect(fd, (struct sockaddr*)&addr, sizeof(addr));
-        if (failed) {
-            printf("Failed to stablish connection to client.\n");
-            close(fd);
-            return -1;
-        }
-        return fd;
+        return addr;
     }
 
     void answer_client(const char* answer, size_t length,
         client_message& message)
     {
-        auto fd = connect_to_client(message.s_addr, message.sin_port);
+        auto fd = socket(AF_INET, SOCK_DGRAM, 0);
         if (fd < 0) {
+            printf("Failed to create socket\n");
             return;
         }
 
-        auto bytes_written = write(fd, answer, length);
+        auto client_addr = get_client_addr(message.s_addr, message.sin_port);
+        auto bytes_written = sendto(
+            fd, answer, length, 0,
+            (const struct sockaddr *) &client_addr, sizeof(client_addr)
+        );
         if (bytes_written < 0) {
             printf("Failed to send answer\n");
         }

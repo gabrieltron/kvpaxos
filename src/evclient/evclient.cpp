@@ -42,69 +42,39 @@ connect_to_proposer(
 	return bev;
 }
 
-static void
-event_cb(struct bufferevent *bev, short ev, void *ptr)
+void
+listen_server(struct client* client, unsigned short port)
 {
-	auto* c = (client *)ptr;
-	if (c->callbacks->eventcb) {
-		return c->callbacks->eventcb(bev, ev, ptr);
+	auto fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0) {
+		printf("Failed to create.");
+		return;
 	}
 
-	if (ev & BEV_EVENT_EOF || ev & BEV_EVENT_ERROR) {
-		bufferevent_free(bev);
-	}
-}
-
-static void
-read_server(struct bufferevent* bev, void* args)
-{
-	auto* c = (client *)args;
-	c->callbacks->readcb(bev, args);
-    bufferevent_free(bev);
-}
-
-static void
-recieve_connection(struct evconnlistener *l, evutil_socket_t fd,
-	struct sockaddr* addr, int socklen, void *arg)
-{
-	client* c = static_cast<client*>(arg);
-	bufferevent* bev = bufferevent_socket_new(c->base, -1, BEV_OPT_CLOSE_ON_FREE);
-
-	bufferevent_setfd(bev, fd);
-	bufferevent_setcb(bev, read_server, NULL, event_cb, c);
-	bufferevent_enable(bev, EV_READ|EV_WRITE);
-    int flag = 1;
-	setsockopt(bufferevent_getfd(bev), IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(int));
-}
-
-bool
-listen_server(struct client* c, unsigned short port)
-{
 	struct sockaddr_in addr;
-	unsigned flags = LEV_OPT_CLOSE_ON_EXEC
-		| LEV_OPT_CLOSE_ON_FREE
-		| LEV_OPT_REUSEABLE;
-
-	/* listen on the given port at address 0.0.0.0 */
 	memset(&addr, 0, sizeof(struct sockaddr_in));
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = htonl(0);
 	addr.sin_port = htons(port);
-
-	c->listener = evconnlistener_new_bind(c->base, recieve_connection, c,
-		flags, -1, (struct sockaddr*)&addr, sizeof(addr));
-	if (c->listener == NULL) {
-		return false;
+	auto binded = bind(fd, (const struct sockaddr *)&addr, sizeof(addr));
+	if (binded < 0) {
+		printf("Failed to bind to socket.");
+		return;
 	}
 
-    return true;
+	while (true) {
+		struct reply_message reply;
+		recv(fd, &reply, sizeof(reply_message), 0);
+
+		client->reply_cb(reply, client->args);
+	}
 }
 
 struct client*
 make_client(
     const char* config, int proposer_id, int outstanding,
 	int value_size, bufferevent_event_cb on_connect,
-	bufferevent_data_cb on_reply
+	reply_callback on_reply
 )
 {
 	struct client* c;
@@ -121,10 +91,7 @@ make_client(
 	c->value_size = value_size;
 	c->outstanding = outstanding;
 	c->send_buffer = (char *)malloc(sizeof(client_message) + value_size);
-	c->callbacks = (bufferevent_callbacks *) malloc(sizeof(bufferevent_callbacks));
-	c->callbacks->readcb = on_reply;
-	c->callbacks->writecb = NULL;
-	c->callbacks->eventcb = NULL;
+	c->reply_cb = on_reply;
 	c->sent_requests_timestamp = new std::unordered_map<
 		int, std::chrono::_V2::system_clock::time_point
 	>();
@@ -139,7 +106,6 @@ void
 client_free(struct client* c)
 {
 	free(c->send_buffer);
-	free(c->callbacks);
 	free(c->listener);
 	bufferevent_free(c->bev);
 	event_free(c->stats_ev);

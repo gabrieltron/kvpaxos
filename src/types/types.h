@@ -40,14 +40,8 @@ struct stats
 	size_t delivered_bytes;
 };
 
-struct bufferevent_callbacks
-{
-	bufferevent_data_cb readcb;
-	bufferevent_data_cb writecb;
-	bufferevent_event_cb eventcb;
-};
-
 typedef std::chrono::_V2::system_clock::time_point time_point;
+typedef void (*reply_callback)(const struct reply_message& c, void *args);
 struct client
 {
 	int id;
@@ -60,7 +54,7 @@ struct client
 	struct event_base* base;
 	struct bufferevent* bev;
 	struct evconnlistener* listener;
-	struct bufferevent_callbacks* callbacks;
+	reply_callback reply_cb;
 	struct event* stats_ev;
 	struct timeval stats_interval;
 	struct event* sig;

@@ -85,16 +85,11 @@ dispatch_requests_thread(evutil_socket_t fd, short event, void *arg)
 }
 
 static void
-read_reply(struct bufferevent* bev, void* args)
+read_reply(const struct reply_message& reply, void* args)
 {
-    auto* c = (client *)args;
-    auto* client_args = (struct client_args *) c->args;
+    auto* client_args = (struct client_args *) args;
     auto* answered_requests = client_args->answered_requests;
     auto* sent_timestamp = client_args->sent_timestamp;
-    reply_message reply;
-    bufferevent_lock(bev);
-    bufferevent_read(bev, &reply, sizeof(reply_message));
-    bufferevent_unlock(bev);
 
     if (answered_requests->find(reply.id) != answered_requests->end()) {
         // already recieved an answer for this request.
@@ -104,7 +99,6 @@ read_reply(struct bufferevent* bev, void* args)
         std::chrono::system_clock::now() - sent_timestamp->at(reply.id);
     if (client_args->print_percentage >= rand() % 100 + 1) {
         if (client_args->verbose) {
-            std::cout << "Client " << c->id << "; ";
             std::cout << "Request " << reply.id << "; ";
             std::cout << "He said " << reply.answer << "; ";
             std::cout << "Delay " << delay_ns.count() << ";\n";
@@ -181,7 +175,7 @@ start_client(const toml_config& config, unsigned short port, bool verbose)
     auto* client = make_ev_client(config);
     client->args = make_client_args(config, port, verbose);
     schedule_send_requests_event(client, config);
-    listen_server(client, port);
+    std::thread listen_thread(listen_server, client, port);
 
 	event_base_dispatch(client->base);
 
