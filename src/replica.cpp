@@ -50,11 +50,13 @@
 #include "graph/graph.hpp"
 
 
+using toml_config = toml::basic_value<
+	toml::discard_comments, std::unordered_map, std::vector
+>;
+
 static int verbose = 0;
 static int SLEEP = 2;
 static int N_PARTITIONS = 4;
-static int REPARTITION_INTERVAL = 1000;
-static model::CutMethod CUT_METHOD = model::KAHIP;
 static bool RUNNING;
 
 struct callback_args {
@@ -96,7 +98,7 @@ print_throughput(int sleep_duration, kvpaxos::Scheduler<int>& scheduler)
 }
 
 static void
-start_replica(int id, std::string config, std::string initial_requests = std::string(""))
+start_replica(int id, const toml_config& config)
 {
 	struct event* sig;
 	struct event_base* base;
@@ -105,14 +107,28 @@ start_replica(int id, std::string config, std::string initial_requests = std::st
 	RUNNING = true;
 
 	base = event_base_new();
-	replica = evpaxos_replica_init(id, config.c_str(), cb, NULL, base);
+	auto paxos_config = toml::find<std::string>(config, "paxos_config");
+	replica = evpaxos_replica_init(id, paxos_config.c_str(), cb, NULL, base);
 	if (replica == NULL) {
 		printf("Could not start the replica!\n");
 		exit(1);
 	}
 
+	auto repartition_method_s = toml::find<std::string>(
+		config, "repartition_method"
+	);
+	auto repartition_method = model::string_to_cut_method.at(
+		repartition_method_s
+	);
+	auto repartition_interval = toml::find<int>(
+		config, "repartition_interval"
+	);
 	kvpaxos::Scheduler<int> scheduler(
-		REPARTITION_INTERVAL, N_PARTITIONS, CUT_METHOD
+		repartition_interval, N_PARTITIONS, repartition_method
+	);
+
+	auto initial_requests = toml::find<std::string>(
+		config, "requests_path"
 	);
 	if (not initial_requests.empty()) {
 		auto populate_requests = std::move(
@@ -161,13 +177,9 @@ main(int argc, char const *argv[])
 	}
 
 	auto id = atoi(argv[1]);
-	auto config = std::string(argv[2]);
-	std::string populate_requests_path;
-	if (argc >= 4) {
-		populate_requests_path = std::string(argv[3]);
-	}
+	const auto config = toml::parse(argv[2]);
 
-	start_replica(id, config, populate_requests_path);
+	start_replica(id, config);
 
 	return 0;
 }
