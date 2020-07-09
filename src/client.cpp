@@ -71,6 +71,7 @@ send_requests(client* c, const std::vector<workload::Request>& requests)
         bufferevent_unlock(c->bev);
         counter++;
     }
+    delete &requests;
 }
 
 static void
@@ -115,6 +116,79 @@ read_reply(struct bufferevent* bev, void* args)
     answered_requests->insert(reply.id);
 }
 
+static struct client*
+make_ev_client(const toml_config& config)
+{
+    auto paxos_config = toml::find<std::string>(
+        config, "paxos_config"
+    );
+    auto proposer_id = toml::find<int>(
+        config, "proposer_id"
+    );
+    auto* client = make_client(
+        paxos_config.c_str(), proposer_id, OUTSTANDING, VALUE_SIZE,
+        nullptr, read_reply
+    );
+	signal(SIGPIPE, SIG_IGN);
+    return client;
+}
+
+static struct client_args*
+make_client_args(const toml_config& config, unsigned short port, bool verbose)
+{
+    auto* client_args = new struct client_args();
+    client_args->verbose = verbose;
+    client_args->print_percentage = toml::find<int>(
+        config, "print_percentage"
+    );
+    client_args->reply_port = port;
+    auto* answered_requests = new std::unordered_set<int>();
+    auto* sent_timestamp = new tbb::concurrent_unordered_map<int, time_point>();
+    client_args->answered_requests = answered_requests;
+    client_args->sent_timestamp = sent_timestamp;
+    return client_args;
+}
+
+static void
+free_client_args(struct client_args* client_args)
+{
+    delete client_args->answered_requests;
+    delete client_args->sent_timestamp;
+    delete client_args;
+}
+
+static void
+schedule_send_requests_event(struct client* client, const toml_config& config)
+{
+    auto requests_path = toml::find<std::string>(
+        config, "requests_path"
+    );
+    auto requests = std::move(workload::import_requests(requests_path, "requests"));
+    auto* requests_pointer = new std::vector<workload::Request>(requests);
+    auto* dispatch_args = new struct dispatch_requests_args();
+    dispatch_args->c = client;
+    dispatch_args->requests = requests_pointer;
+	auto time = (struct timeval){1, 0};
+	auto send_event = evtimer_new(
+        client->base, dispatch_requests_thread, dispatch_args
+    );
+	event_add(send_event, &time);
+}
+
+static void
+start_client(const toml_config& config, unsigned short port, bool verbose)
+{
+    auto* client = make_ev_client(config);
+    client->args = make_client_args(config, port, verbose);
+    schedule_send_requests_event(client, config);
+    listen_server(client, port);
+
+	event_base_dispatch(client->base);
+
+    free_client_args((struct client_args *)client->args);
+    client_free(client);
+}
+
 void usage(std::string name) {
     std::cout << "Usage: " << name << " port id client_config request_config (-v|percentage)\n";
 }
@@ -135,45 +209,7 @@ int main(int argc, char* argv[]) {
     }
     srand (time(NULL));
 
-    auto paxos_config = toml::find<std::string>(
-        config, "paxos_config"
-    );
-    auto proposer_id = toml::find<int>(
-        config, "proposer_id"
-    );
-    auto* client = make_client(
-        paxos_config.c_str(), proposer_id, OUTSTANDING, VALUE_SIZE,
-        reply_port, nullptr, read_reply
-    );
-	signal(SIGPIPE, SIG_IGN);
-
-    struct client_args client_args;
-    client_args.verbose = verbose;
-    client_args.print_percentage = toml::find<int>(
-        config, "print_percentage"
-    );
-    client_args.reply_port = reply_port;
-    std::unordered_set<int> answered_requests;
-    tbb::concurrent_unordered_map<int, time_point> sent_timestamp;
-    client_args.answered_requests = &answered_requests;
-    client_args.sent_timestamp = &sent_timestamp;
-    client->args = &client_args;
-
-    auto requests_path = toml::find<std::string>(
-        config, "requests_path"
-    );
-    auto requests = std::move(workload::import_requests(requests_path, "requests"));
-    dispatch_requests_args dispatch_args;
-    dispatch_args.c = client;
-    dispatch_args.requests = &requests;
-	auto time = (struct timeval){1, 0};
-	auto send_event = evtimer_new(
-        client->base, dispatch_requests_thread, &dispatch_args
-    );
-	event_add(send_event, &time);
-
-	event_base_dispatch(client->base);
-    client_free(client);
+    start_client(config, reply_port, verbose);
 
     return 0;
 }

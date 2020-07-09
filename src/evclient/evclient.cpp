@@ -77,8 +77,8 @@ recieve_connection(struct evconnlistener *l, evutil_socket_t fd,
 	setsockopt(bufferevent_getfd(bev), IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(int));
 }
 
-static bool
-serves_listen(struct client* c, unsigned short port)
+bool
+listen_server(struct client* c, unsigned short port)
 {
 	struct sockaddr_in addr;
 	unsigned flags = LEV_OPT_CLOSE_ON_EXEC
@@ -103,7 +103,7 @@ serves_listen(struct client* c, unsigned short port)
 struct client*
 make_client(
     const char* config, int proposer_id, int outstanding,
-	int value_size, unsigned short reply_port, bufferevent_event_cb on_connect,
+	int value_size, bufferevent_event_cb on_connect,
 	bufferevent_data_cb on_reply
 )
 {
@@ -128,11 +128,6 @@ make_client(
 	c->sent_requests_timestamp = new std::unordered_map<
 		int, std::chrono::_V2::system_clock::time_point
 	>();
-
-    auto listener_created = serves_listen(c, reply_port);
-    if (not listener_created) {
-        return NULL;
-    }
 
 	c->sig = evsignal_new(c->base, SIGINT, handle_sigint, c->base);
 	evsignal_add(c->sig, NULL);

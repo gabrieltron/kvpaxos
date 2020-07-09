@@ -19,9 +19,10 @@
 
 struct client* make_client(
     const char* config, int proposer_id, int outstanding,
-	int value_size, unsigned short reply_port, bufferevent_event_cb on_connect,
+	int value_size, bufferevent_event_cb on_connect,
 	bufferevent_data_cb on_reply
 );
+bool listen_server(struct client* c, unsigned short port);
 void client_free(struct client* c);
 
 
