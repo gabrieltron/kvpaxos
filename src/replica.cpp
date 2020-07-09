@@ -55,15 +55,14 @@ using toml_config = toml::basic_value<
 >;
 
 static int verbose = 0;
-static int SLEEP = 2;
+static int SLEEP = 1;
 static int N_PARTITIONS = 4;
 static bool RUNNING;
 
-struct callback_args {
+struct replica_args {
 	event_base* base;
+	event* signal;
 	kvpaxos::Scheduler<int>* scheduler;
-	int request_counter;
-	std::mutex* counter_mutex;
 };
 
 static void
@@ -79,41 +78,47 @@ static void
 deliver(unsigned iid, char* value, size_t size, void* arg)
 {
 	auto* request = (struct client_message*)value;
-	auto* args = (callback_args*) arg;
+	auto* args = (struct replica_args*) arg;
 	auto* scheduler = args->scheduler;
-	scheduler ->schedule_and_answer(*request);
+	scheduler->schedule_and_answer(*request);
 }
 
 void
-print_throughput(int sleep_duration, kvpaxos::Scheduler<int>& scheduler)
+print_throughput(int sleep_duration, kvpaxos::Scheduler<int>* scheduler)
 {
 	auto already_counted = 0;
 	while (RUNNING) {
 		std::this_thread::sleep_for(std::chrono::seconds(2));
-		auto throughput = scheduler.n_executed_requests() - already_counted;
+		auto throughput = scheduler->n_executed_requests() - already_counted;
 		std::cout << std::chrono::system_clock::now().time_since_epoch().count() << ",";
 		std::cout << throughput << "\n";
 		already_counted += throughput;
 	}
 }
 
-static void
-start_replica(int id, const toml_config& config)
+static struct evpaxos_replica*
+initialize_evpaxos_replica(int id, const toml_config& config)
 {
-	struct event* sig;
-	struct event_base* base;
-	struct evpaxos_replica* replica;
 	deliver_function cb = deliver;
-	RUNNING = true;
-
-	base = event_base_new();
+	auto* base = event_base_new();
 	auto paxos_config = toml::find<std::string>(config, "paxos_config");
-	replica = evpaxos_replica_init(id, paxos_config.c_str(), cb, NULL, base);
-	if (replica == NULL) {
-		printf("Could not start the replica!\n");
-		exit(1);
-	}
+	auto* replica = evpaxos_replica_init(id, paxos_config.c_str(), cb, NULL, base);
 
+	auto* sig = evsignal_new(base, SIGINT, handle_sigint, base);
+	evsignal_add(sig, NULL);
+	signal(SIGPIPE, SIG_IGN);
+
+	auto* args = new replica_args();
+	args->base = base;
+	args->signal = sig;
+	replica->arg = args;
+
+	return replica;
+}
+
+static kvpaxos::Scheduler<int>*
+initialize_scheduler(const toml_config& config)
+{
 	auto repartition_method_s = toml::find<std::string>(
 		config, "repartition_method"
 	);
@@ -123,7 +128,7 @@ start_replica(int id, const toml_config& config)
 	auto repartition_interval = toml::find<int>(
 		config, "repartition_interval"
 	);
-	kvpaxos::Scheduler<int> scheduler(
+	auto* scheduler = new kvpaxos::Scheduler<int>(
 		repartition_interval, N_PARTITIONS, repartition_method
 	);
 
@@ -134,32 +139,48 @@ start_replica(int id, const toml_config& config)
 		auto populate_requests = std::move(
 			workload::import_requests(initial_requests, "load_requests")
 		);
-		scheduler.process_populate_requests(populate_requests);
+		scheduler->process_populate_requests(populate_requests);
 	}
-	scheduler.run();
 
-	std::mutex counter_mutex;
-	struct callback_args args;
-	args.base = base;
-	args.scheduler = &scheduler;
-	args.request_counter = 0;
-	args.counter_mutex = &counter_mutex;
-	replica->arg = &args;
+	return scheduler;
+}
+
+static void
+free_replica(struct evpaxos_replica* replica)
+{
+	auto* args = (struct replica_args*) replica->arg;
+	event_free(args->signal);
+	event_base_free(args->base);
+	delete args->scheduler;
+	free(args);
+	evpaxos_replica_free(replica);
+}
+
+static void
+start_replica(int id, const toml_config& config)
+{
+	struct evpaxos_replica* replica;
+	RUNNING = true;
+
+	replica = initialize_evpaxos_replica(id, config);
+	if (replica == nullptr) {
+		printf("Could not start the replica!\n");
+		exit(1);
+	}
+
+	auto* scheduler = std::move(initialize_scheduler(config));
+	scheduler->run();
+	auto* args = (struct replica_args*) replica->arg;
+	args->scheduler = scheduler;
 
 	std::thread throughput_thread(
-		print_throughput, SLEEP, std::ref(scheduler)
+		print_throughput, SLEEP, scheduler
 	);
 
-	sig = evsignal_new(base, SIGINT, handle_sigint, base);
-	evsignal_add(sig, NULL);
-
-	signal(SIGPIPE, SIG_IGN);
-	event_base_dispatch(base);
+	event_base_dispatch(args->base);
 
 	throughput_thread.join();
-	event_free(sig);
-	evpaxos_replica_free(replica);
-	event_base_free(base);
+	free_replica(replica);
 }
 
 static void
