@@ -34,7 +34,9 @@ public:
     Partition(int id)
         : id_{id},
           executing_{true}
-    {}
+    {
+        socket_fd_ = socket(AF_INET, SOCK_DGRAM, 0);
+    }
 
     ~Partition() {
         executing_ = false;
@@ -128,22 +130,14 @@ private:
     void answer_client(const char* answer, size_t length,
         client_message& message)
     {
-        auto fd = socket(AF_INET, SOCK_DGRAM, 0);
-        if (fd < 0) {
-            printf("Failed to create socket\n");
-            return;
-        }
-
         auto client_addr = get_client_addr(message.s_addr, message.sin_port);
         auto bytes_written = sendto(
-            fd, answer, length, 0,
+            socket_fd_, answer, length, 0,
             (const struct sockaddr *) &client_addr, sizeof(client_addr)
         );
         if (bytes_written < 0) {
             printf("Failed to send answer\n");
         }
-
-        close(fd);
     }
 
     void update_graph(const std::vector<T>& data) {
@@ -251,7 +245,7 @@ private:
         }
     }
 
-    int id_;
+    int id_, socket_fd_;
     static kvstorage::Storage storage_;
     static model::Graph<T> workload_graph_;
     static int n_executed_requests_;
