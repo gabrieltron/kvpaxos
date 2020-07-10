@@ -184,7 +184,7 @@ start_client(const toml_config& config, unsigned short port, bool verbose)
 }
 
 void usage(std::string name) {
-    std::cout << "Usage: " << name << " port id client_config request_config (-v|percentage)\n";
+    std::cout << "Usage: " << name << " port config [-v]\n";
 }
 
 int main(int argc, char* argv[]) {

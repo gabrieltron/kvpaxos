@@ -186,7 +186,7 @@ start_replica(int id, const toml_config& config)
 static void
 usage(std::string prog)
 {
-	std::cout << "Usage: " << prog << " id path/to/paxos.conf [path/to/load/requests.toml]\n";
+	std::cout << "Usage: " << prog << " id config\n";
 }
 
 int

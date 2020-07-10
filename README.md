@@ -33,27 +33,36 @@ Help would be appreciated in order to make Conan include those packages and link
 Inside the build folder, a folder `bin` will have the two executables, the replica and the client. The replica is started as follows:
 
 ```
-    ./replica id path_to_paxos_conf [path_to_load_requests]
+    ./replica id path_to_config
 ```
 
 The arguments are:
 * id - Replica's id.
-* path_to_paxos_conf - Path to paxo's configuration file.
-* path_to_load_requests - Path to a toml file containing request to be used in storage load phase.
+* path_to_config - Path to toml configuration file. It must specify the path to paxo's configuration file, path to requests (it can be an empty string), repartition method and repartition interval.
 
 The client is started as follows:
 
 ```
-    ./client reply_port replica_id path_to_paxos_conf path_to_requests (-v|percentage)
+    ./client reply_port path_to_config [-v]
 ```
 
 The arguments are:
 * reply_port - Port in which the client will listen to replies from the replica.
-* replica_id - Id of the replica that the client will connect to.
-* path_to_paxos_conf - Path to paxo's configuration file.
-* path_to_requests - Path to request's file.
+* path_to_config - Path to toml configuration file. It must specify the path to paxo's configuration file, path to requests, id of the proposer the client should connect to, and the percentage of request to have their answer printed.
 * -v - Print full information of all recieved answers.
-* percentage - Print this specified percentage of request's latency.
+
+A single configuration file can be used to both client and replica, and it looks like this:
+
+```
+    paxos_config = "../paxos.conf"
+    requests_path = "../../requests.toml"
+    repartition_method = "KAHIP"
+    repartition_interval = 1000
+    proposer_id = 0
+    print_percentage = 10
+```
+
+Paths can be absolute or relative to the directory you're calling the code from.
 
 A paxos configuration file specifies Paxos characteristics, such as number of replicas and their addresses. An exemple of a configuration file can be found on the LibPaxos project, [here](https://github.com/gabrieltron/libpaxos/blob/master/paxos.conf).
 
