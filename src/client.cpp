@@ -34,6 +34,7 @@ struct client_args {
     int print_percentage;
     unsigned short reply_port;
     tbb::concurrent_unordered_map<int, time_point>* sent_timestamp;
+    std::vector<std::chrono::nanoseconds>* recorded_delays;
     std::unordered_set<int>* answered_requests;
 };
 
@@ -95,19 +96,28 @@ read_reply(const struct reply_message& reply, void* args)
         // already recieved an answer for this request.
         return;
     }
-    auto delay_ns =
-        std::chrono::system_clock::now() - sent_timestamp->at(reply.id);
+
     if (client_args->print_percentage >= rand() % 100 + 1) {
+        auto delay_ns =
+            std::chrono::system_clock::now() - sent_timestamp->at(reply.id);
+
         if (client_args->verbose) {
             std::cout << "Request " << reply.id << "; ";
             std::cout << "He said " << reply.answer << "; ";
             std::cout << "Delay " << delay_ns.count() << ";\n";
         } else {
-            std::cout << std::chrono::system_clock::now().time_since_epoch().count() << ",";
-            std::cout << delay_ns.count() << "\n";
+            client_args->recorded_delays->push_back(delay_ns);
         }
     }
     answered_requests->insert(reply.id);
+
+    if (answered_requests->size() == 100000) {
+        for (auto i = 0; i < client_args->recorded_delays->size(); i++) {
+            std::cout << i << ",";
+            std::cout << client_args->recorded_delays->at(i).count() << "\n";
+        }
+        std::cout << std::endl;
+    }
 }
 
 static struct client*
@@ -138,8 +148,10 @@ make_client_args(const toml_config& config, unsigned short port, bool verbose)
     client_args->reply_port = port;
     auto* answered_requests = new std::unordered_set<int>();
     auto* sent_timestamp = new tbb::concurrent_unordered_map<int, time_point>();
+    auto* recorded_delays = new std::vector<std::chrono::nanoseconds>();
     client_args->answered_requests = answered_requests;
     client_args->sent_timestamp = sent_timestamp;
+    client_args->recorded_delays = recorded_delays;
     return client_args;
 }
 
@@ -148,6 +160,7 @@ free_client_args(struct client_args* client_args)
 {
     delete client_args->answered_requests;
     delete client_args->sent_timestamp;
+    delete client_args->recorded_delays;
     delete client_args;
 }
 
