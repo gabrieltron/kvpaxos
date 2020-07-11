@@ -66,9 +66,7 @@ send_requests(client* c, const std::vector<workload::Request>& requests)
         auto timestamp = std::chrono::system_clock::now();
         auto kv = std::make_pair(v->id, timestamp);
         client_args->sent_timestamp->insert(kv);
-        bufferevent_lock(c->bev);
         paxos_submit(c->bev, c->send_buffer, size);
-        bufferevent_unlock(c->bev);
         counter++;
     }
     delete &requests;
