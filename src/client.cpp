@@ -5,6 +5,7 @@
 #include <event2/listener.h>
 #include <iostream>
 #include <netinet/tcp.h>
+#include <semaphore.h>
 #include <tbb/concurrent_unordered_map.h>
 #include <thread>
 #include <unordered_map>
@@ -27,26 +28,28 @@ using toml_config = toml::basic_value<
 struct dispatch_requests_args {
     client* c;
     std::vector<workload::Request>* requests;
-};
-
-struct client_args {
-    bool verbose;
-    int print_percentage;
-    unsigned short reply_port;
-    tbb::concurrent_unordered_map<int, time_point>* sent_timestamp;
-    std::unordered_set<int>* answered_requests;
+    sem_t* requests_semaphore;
+    int n_listener_threads;
 };
 
 
 static void
-send_requests(client* c, const std::vector<workload::Request>& requests)
+send_requests(
+    client* c,
+    const std::vector<workload::Request>& requests,
+    sem_t* semaphore,
+    int n_listener_threads
+)
 {
     auto* client_args = (struct client_args *) c->args;
 	auto* v = (struct client_message*)c->send_buffer;
-    v->sin_port = htons(client_args->reply_port);
 
     auto counter = 0;
     for (auto& request: requests) {
+        sem_wait(semaphore);
+        v->sin_port = htons(
+            client_args->reply_port + (counter % n_listener_threads)
+        );
         v->id = counter;
         v->type = request.type();
         v->key = request.key();
@@ -78,7 +81,12 @@ dispatch_requests_thread(evutil_socket_t fd, short event, void *arg)
     auto* dispatch_args = (dispatch_requests_args *)arg;
     auto* requests = (std::vector<workload::Request>*) dispatch_args->requests;
     auto* client = dispatch_args->c;
-    std::thread send_requests_thread(send_requests, client, std::ref(*requests));
+    auto* semaphore = dispatch_args->requests_semaphore;
+    auto n_listener_threads = dispatch_args->n_listener_threads;
+    std::thread send_requests_thread(
+        send_requests, client, std::ref(*requests), semaphore,
+        n_listener_threads
+    );
     send_requests_thread.detach();
 }
 
@@ -86,13 +94,7 @@ static void
 read_reply(const struct reply_message& reply, void* args)
 {
     auto* client_args = (struct client_args *) args;
-    auto* answered_requests = client_args->answered_requests;
     auto* sent_timestamp = client_args->sent_timestamp;
-
-    if (answered_requests->find(reply.id) != answered_requests->end()) {
-        // already recieved an answer for this request.
-        return;
-    }
 
     if (client_args->print_percentage >= rand() % 100 + 1) {
         auto now = std::chrono::system_clock::now();
@@ -107,7 +109,6 @@ read_reply(const struct reply_message& reply, void* args)
             std::cout << delay_ns.count() << "\n";
         }
     }
-    answered_requests->insert(reply.id);
 }
 
 static struct client*
@@ -136,9 +137,7 @@ make_client_args(const toml_config& config, unsigned short port, bool verbose)
         config, "print_percentage"
     );
     client_args->reply_port = port;
-    auto* answered_requests = new std::unordered_set<int>();
     auto* sent_timestamp = new tbb::concurrent_unordered_map<int, time_point>();
-    client_args->answered_requests = answered_requests;
     client_args->sent_timestamp = sent_timestamp;
     return client_args;
 }
@@ -146,13 +145,16 @@ make_client_args(const toml_config& config, unsigned short port, bool verbose)
 static void
 free_client_args(struct client_args* client_args)
 {
-    delete client_args->answered_requests;
     delete client_args->sent_timestamp;
     delete client_args;
 }
 
 static void
-schedule_send_requests_event(struct client* client, const toml_config& config)
+schedule_send_requests_event(
+    struct client* client,
+    sem_t& requests_semaphore,
+    int n_listener_threads,
+    const toml_config& config)
 {
     auto requests_path = toml::find<std::string>(
         config, "requests_path"
@@ -162,6 +164,8 @@ schedule_send_requests_event(struct client* client, const toml_config& config)
     auto* dispatch_args = new struct dispatch_requests_args();
     dispatch_args->c = client;
     dispatch_args->requests = requests_pointer;
+    dispatch_args->requests_semaphore = &requests_semaphore;
+    dispatch_args->n_listener_threads = n_listener_threads;
 	auto time = (struct timeval){1, 0};
 	auto send_event = evtimer_new(
         client->base, dispatch_requests_thread, dispatch_args
@@ -174,10 +178,23 @@ start_client(const toml_config& config, unsigned short port, bool verbose)
 {
     auto* client = make_ev_client(config);
     client->args = make_client_args(config, port, verbose);
-    schedule_send_requests_event(client, config);
-    std::thread listen_thread(listen_server, client, port);
 
-	event_base_dispatch(client->base);
+    sem_t requests_semaphore;
+    auto n_listener_threads = toml::find<int>(
+        config, "n_threads"
+    );
+    sem_init(&requests_semaphore, 0, n_listener_threads);
+    schedule_send_requests_event(
+        client, requests_semaphore, n_listener_threads, config
+    );
+    std::vector<std::thread> listener_threads;
+    for (auto i = 0; i < n_listener_threads; i++) {
+        listener_threads.emplace_back(
+            listen_server, client, port+i, std::ref(requests_semaphore)
+        );
+    }
+
+	event_base_loop(client->base, EVLOOP_NO_EXIT_ON_EMPTY);
 
     free_client_args((struct client_args *)client->args);
     client_free(client);

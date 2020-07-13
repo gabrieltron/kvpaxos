@@ -43,7 +43,7 @@ connect_to_proposer(
 }
 
 void
-listen_server(struct client* client, unsigned short port)
+listen_server(struct client* client, unsigned short port, sem_t& semaphore)
 {
 	auto fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd < 0) {
@@ -62,11 +62,17 @@ listen_server(struct client* client, unsigned short port)
 		return;
 	}
 
+	std::unordered_set<int> answered_requests;
 	while (true) {
 		struct reply_message reply;
 		recv(fd, &reply, sizeof(reply_message), 0);
+		if (answered_requests.find(reply.id) != answered_requests.end()) {
+			continue;
+		}
 
 		client->reply_cb(reply, client->args);
+		answered_requests.insert(reply.id);
+		sem_post(&semaphore);
 	}
 }
 

@@ -9,10 +9,12 @@
 #include <evpaxos.h>
 #include <stdlib.h>
 #include <time.h>
+#include <semaphore.h>
 #include <string.h>
 #include <signal.h>
 #include <netinet/tcp.h>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "types/types.h"
 
@@ -22,7 +24,7 @@ struct client* make_client(
 	int value_size, bufferevent_event_cb on_connect,
 	reply_callback on_reply
 );
-void listen_server(struct client* c, unsigned short port);
+void listen_server(struct client* c, unsigned short port, sem_t& semaphore);
 void client_free(struct client* c);
 
 

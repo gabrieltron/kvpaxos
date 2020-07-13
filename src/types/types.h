@@ -12,10 +12,21 @@
 
 #include <chrono>
 #include <unordered_map>
+#include <unordered_set>
+#include <tbb/concurrent_unordered_map.h>
 
 #include <evpaxos.h>
 #include <evpaxos/paxos.h>
 
+
+typedef std::chrono::_V2::system_clock::time_point time_point;
+
+struct client_args {
+    bool verbose;
+    int print_percentage;
+    unsigned short reply_port;
+    tbb::concurrent_unordered_map<int, time_point>* sent_timestamp;
+};
 
 struct reply_message {
 	int id;
@@ -40,7 +51,6 @@ struct stats
 	size_t delivered_bytes;
 };
 
-typedef std::chrono::_V2::system_clock::time_point time_point;
 typedef void (*reply_callback)(const struct reply_message& c, void *args);
 struct client
 {
