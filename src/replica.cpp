@@ -70,6 +70,7 @@ handle_sigint(int sig, short ev, void* arg)
 {
 	struct event_base* base = static_cast<event_base*>(arg);
 	printf("Caught signal %d\n", sig);
+	fflush(stdout);
 	event_base_loopexit(base, NULL);
 	RUNNING = false;
 }
