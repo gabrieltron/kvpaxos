@@ -88,7 +88,7 @@ print_throughput(int sleep_duration, kvpaxos::Scheduler<int>* scheduler)
 {
 	auto already_counted = 0;
 	while (RUNNING) {
-		std::this_thread::sleep_for(std::chrono::seconds(2));
+		std::this_thread::sleep_for(std::chrono::seconds(sleep_duration));
 		auto throughput = scheduler->n_executed_requests() - already_counted;
 		std::cout << std::chrono::system_clock::now().time_since_epoch().count() << ",";
 		std::cout << throughput << "\n";
