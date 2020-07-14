@@ -95,11 +95,13 @@ read_reply(const struct reply_message& reply, void* args)
 {
     auto* client_args = (struct client_args *) args;
     auto* sent_timestamp = client_args->sent_timestamp;
+    auto* print_mutex = client_args->print_mutex;
 
     if (client_args->print_percentage >= rand() % 100 + 1) {
         auto now = std::chrono::system_clock::now();
         auto delay_ns = now - sent_timestamp->at(reply.id);
 
+        std::lock_guard<std::mutex> lock(*print_mutex);
         if (client_args->verbose) {
             std::cout << "Request " << reply.id << "; ";
             std::cout << "He said " << reply.answer << "; ";
@@ -138,13 +140,16 @@ make_client_args(const toml_config& config, unsigned short port, bool verbose)
     );
     client_args->reply_port = port;
     auto* sent_timestamp = new tbb::concurrent_unordered_map<int, time_point>();
+    auto* print_mutex = new std::mutex();
     client_args->sent_timestamp = sent_timestamp;
+    client_args->print_mutex = print_mutex;
     return client_args;
 }
 
 static void
 free_client_args(struct client_args* client_args)
 {
+    delete client_args->print_mutex;
     delete client_args->sent_timestamp;
     delete client_args;
 }

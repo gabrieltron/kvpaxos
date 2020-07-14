@@ -11,6 +11,7 @@
 
 
 #include <chrono>
+#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 #include <tbb/concurrent_unordered_map.h>
@@ -26,6 +27,7 @@ struct client_args {
     int print_percentage;
     unsigned short reply_port;
     tbb::concurrent_unordered_map<int, time_point>* sent_timestamp;
+	std::mutex* print_mutex;
 };
 
 struct reply_message {
