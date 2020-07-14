@@ -64,6 +64,7 @@ listen_server(struct client* client, unsigned short port, sem_t& semaphore)
 
 	std::unordered_set<int> answered_requests;
 	while (true) {
+		sem_post(&semaphore);
 		struct reply_message reply;
 		recv(fd, &reply, sizeof(reply_message), 0);
 		if (answered_requests.find(reply.id) != answered_requests.end()) {
@@ -72,7 +73,6 @@ listen_server(struct client* client, unsigned short port, sem_t& semaphore)
 
 		client->reply_cb(reply, client->args);
 		answered_requests.insert(reply.id);
-		sem_post(&semaphore);
 	}
 }
 

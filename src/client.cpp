@@ -183,7 +183,7 @@ start_client(const toml_config& config, unsigned short port, bool verbose)
     auto n_listener_threads = toml::find<int>(
         config, "n_threads"
     );
-    sem_init(&requests_semaphore, 0, n_listener_threads);
+    sem_init(&requests_semaphore, 0, 0);
     schedule_send_requests_event(
         client, requests_semaphore, n_listener_threads, config
     );
