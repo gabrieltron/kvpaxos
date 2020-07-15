@@ -45,8 +45,8 @@
 #include <vector>
 
 #include "request/request_generation.h"
+#include "storage/storage.h"
 #include "types/types.h"
-#include "scheduler/scheduler.hpp"
 #include "graph/graph.hpp"
 
 
@@ -62,7 +62,8 @@ static bool RUNNING;
 struct replica_args {
 	event_base* base;
 	event* signal;
-	kvpaxos::Scheduler<int>* scheduler;
+	kvstorage::Storage* storage;
+	int socket_fd_, n_executed_requests;
 };
 
 static void
@@ -75,26 +76,138 @@ handle_sigint(int sig, short ev, void* arg)
 	RUNNING = false;
 }
 
+static struct sockaddr_in
+get_client_addr(unsigned long ip, unsigned short port)
+{
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = ip;
+    addr.sin_port = port;
+    return addr;
+}
+
+static void
+answer_client(const char* answer, size_t length,
+    client_message& message, int fd)
+{
+    auto client_addr = get_client_addr(message.s_addr, message.sin_port);
+    auto bytes_written = sendto(
+        fd, answer, length, 0,
+        (const struct sockaddr *) &client_addr, sizeof(client_addr)
+    );
+    if (bytes_written < 0) {
+        printf("Failed to send answer\n");
+    }
+}
+
+static std::string
+execute_request(
+	kvstorage::Storage& storage,
+	int key,
+	request_type type,
+	const std::string& args
+)
+{
+    std::string answer;
+    switch (type)
+    {
+    case READ:
+    {
+        answer = std::move(storage.read(key));
+        break;
+    }
+
+    case WRITE:
+    {
+        storage.write(key, args);
+        answer = args;
+        break;
+    }
+
+    case SCAN:
+    {
+        auto length = std::stoi(args);
+        auto values = std::move(storage.scan(key, length));
+
+        std::ostringstream oss;
+        std::copy(values.begin(), values.end(), std::ostream_iterator<std::string>(oss, ","));
+        answer = std::string(oss.str());
+
+        std::vector<int> keys(length);
+        std::iota(keys.begin(), keys.end(), 1);
+        break;
+    }
+
+    case ERROR:
+        answer = "ERROR";
+        break;
+    default:
+        break;
+    }
+
+	return answer;
+}
+
 static void
 deliver(unsigned iid, char* value, size_t size, void* arg)
 {
 	auto* request = (struct client_message*)value;
 	auto* args = (struct replica_args*) arg;
-	auto* scheduler = args->scheduler;
-	scheduler->schedule_and_answer(*request);
+
+	auto* storage = args->storage;
+	auto key = request->key;
+	auto type = static_cast<request_type>(request->type);
+	auto request_args = std::string(request->args);
+	auto answer = execute_request(*storage, key, type, request_args);
+
+    reply_message reply;
+    reply.id = request->id;
+    strncpy(reply.answer, answer.c_str(), answer.size());
+    reply.answer[answer.size()] = '\0';
+	answer_client(
+		(char *)&reply, sizeof(reply_message), *request,
+		args->socket_fd_
+	);
+	args->n_executed_requests++;
 }
 
 void
-print_throughput(int sleep_duration, kvpaxos::Scheduler<int>* scheduler)
+print_throughput(int sleep_duration, evpaxos_replica* replica)
 {
 	auto already_counted = 0;
+	auto* args = (replica_args *) replica->arg;
 	while (RUNNING) {
 		std::this_thread::sleep_for(std::chrono::seconds(sleep_duration));
-		auto throughput = scheduler->n_executed_requests() - already_counted;
+		auto throughput = args->n_executed_requests - already_counted;
 		std::cout << std::chrono::system_clock::now().time_since_epoch().count() << ",";
 		std::cout << throughput << "\n";
+
 		already_counted += throughput;
 	}
+}
+
+static kvstorage::Storage*
+initialize_storage(const toml_config& config)
+{
+	auto* storage = new kvstorage::Storage();
+
+	auto initial_requests = toml::find<std::string>(
+		config, "requests_path"
+	);
+	if (not initial_requests.empty()) {
+		auto populate_requests = std::move(
+			workload::import_requests(initial_requests, "load_requests")
+		);
+
+		for (auto& request : populate_requests) {
+			auto key = request.key();
+			auto type = static_cast<request_type>(request.type());
+			auto args = request.args();
+			execute_request(*storage, key, type, args);
+		}
+	}
+
+	return storage;
 }
 
 static struct evpaxos_replica*
@@ -102,6 +215,7 @@ initialize_evpaxos_replica(int id, const toml_config& config)
 {
 	deliver_function cb = deliver;
 	auto* base = event_base_new();
+
 	auto paxos_config = toml::find<std::string>(config, "paxos_config");
 	auto* replica = evpaxos_replica_init(id, paxos_config.c_str(), cb, NULL, base);
 
@@ -117,42 +231,13 @@ initialize_evpaxos_replica(int id, const toml_config& config)
 	return replica;
 }
 
-static kvpaxos::Scheduler<int>*
-initialize_scheduler(const toml_config& config)
-{
-	auto repartition_method_s = toml::find<std::string>(
-		config, "repartition_method"
-	);
-	auto repartition_method = model::string_to_cut_method.at(
-		repartition_method_s
-	);
-	auto repartition_interval = toml::find<int>(
-		config, "repartition_interval"
-	);
-	auto* scheduler = new kvpaxos::Scheduler<int>(
-		repartition_interval, N_PARTITIONS, repartition_method
-	);
-
-	auto initial_requests = toml::find<std::string>(
-		config, "requests_path"
-	);
-	if (not initial_requests.empty()) {
-		auto populate_requests = std::move(
-			workload::import_requests(initial_requests, "load_requests")
-		);
-		scheduler->process_populate_requests(populate_requests);
-	}
-
-	return scheduler;
-}
-
 static void
 free_replica(struct evpaxos_replica* replica)
 {
 	auto* args = (struct replica_args*) replica->arg;
 	event_free(args->signal);
 	event_base_free(args->base);
-	delete args->scheduler;
+	delete args->storage;
 	free(args);
 	evpaxos_replica_free(replica);
 }
@@ -169,13 +254,14 @@ start_replica(int id, const toml_config& config)
 		exit(1);
 	}
 
-	auto* scheduler = std::move(initialize_scheduler(config));
-	scheduler->run();
 	auto* args = (struct replica_args*) replica->arg;
-	args->scheduler = scheduler;
+
+	args->storage = initialize_storage(config);
+	args->n_executed_requests = 0;
+	args->socket_fd_ = socket(AF_INET, SOCK_DGRAM, 0);
 
 	std::thread throughput_thread(
-		print_throughput, SLEEP, scheduler
+		print_throughput, SLEEP, replica
 	);
 
 	event_base_dispatch(args->base);
