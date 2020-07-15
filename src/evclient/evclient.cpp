@@ -65,7 +65,7 @@ listen_server(
 	}
 
 	struct timeval timeout;
-	timeout.tv_sec = 3*60;
+	timeout.tv_sec = 1;
 	timeout.tv_usec = 0;
 	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
@@ -76,7 +76,7 @@ listen_server(
 		struct reply_message reply;
 		auto n_bytes = recv(fd, &reply, sizeof(reply_message), 0);
 		if (n_bytes == -1) {
-			break;
+			continue;
 		}
 
 		if (answered_requests.find(reply.id) != answered_requests.end()) {
