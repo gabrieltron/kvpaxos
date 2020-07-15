@@ -43,8 +43,10 @@ connect_to_proposer(
 }
 
 void
-listen_server(struct client* client, unsigned short port, sem_t& semaphore)
-{
+listen_server(
+	struct client* client, unsigned short port, sem_t& semaphore,
+	pthread_barrier_t& start_barrier
+) {
 	auto fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd < 0) {
 		printf("Failed to create.");
@@ -68,6 +70,7 @@ listen_server(struct client* client, unsigned short port, sem_t& semaphore)
 	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
 	std::unordered_set<int> answered_requests;
+	pthread_barrier_wait(&start_barrier);
 	while (true) {
 		sem_post(&semaphore);
 		struct reply_message reply;

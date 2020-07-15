@@ -9,6 +9,7 @@
 #include <evpaxos.h>
 #include <stdlib.h>
 #include <time.h>
+#include <pthread.h>
 #include <semaphore.h>
 #include <string.h>
 #include <signal.h>
@@ -24,7 +25,9 @@ struct client* make_client(
 	int value_size, bufferevent_event_cb on_connect,
 	reply_callback on_reply
 );
-void listen_server(struct client* c, unsigned short port, sem_t& semaphore);
+void listen_server(
+	struct client* c, unsigned short port, sem_t& semaphore,
+	pthread_barrier_t& start_barrier);
 void client_free(struct client* c);
 
 

@@ -5,6 +5,7 @@
 #include <event2/listener.h>
 #include <iostream>
 #include <netinet/tcp.h>
+#include <pthread.h>
 #include <semaphore.h>
 #include <tbb/concurrent_unordered_map.h>
 #include <thread>
@@ -29,6 +30,7 @@ struct dispatch_requests_args {
     client* c;
     std::vector<workload::Request>* requests;
     sem_t* requests_semaphore;
+    pthread_barrier_t* start_barrier;
     int n_listener_threads;
 };
 
@@ -38,6 +40,7 @@ send_requests(
     client* c,
     const std::vector<workload::Request>& requests,
     sem_t* semaphore,
+    pthread_barrier_t* start_barrier,
     int n_listener_threads
 )
 {
@@ -45,6 +48,7 @@ send_requests(
 	auto* v = (struct client_message*)c->send_buffer;
 
     auto counter = 0;
+    pthread_barrier_wait(start_barrier);
     for (auto& request: requests) {
         sem_wait(semaphore);
         v->sin_port = htons(
@@ -82,10 +86,11 @@ dispatch_requests_thread(evutil_socket_t fd, short event, void *arg)
     auto* requests = (std::vector<workload::Request>*) dispatch_args->requests;
     auto* client = dispatch_args->c;
     auto* semaphore = dispatch_args->requests_semaphore;
+    auto* barrier = dispatch_args->start_barrier;
     auto n_listener_threads = dispatch_args->n_listener_threads;
     std::thread send_requests_thread(
         send_requests, client, std::ref(*requests), semaphore,
-        n_listener_threads
+        barrier, n_listener_threads
     );
     send_requests_thread.detach();
 }
@@ -158,6 +163,7 @@ static void
 schedule_send_requests_event(
     struct client* client,
     sem_t& requests_semaphore,
+    pthread_barrier_t& start_barrier,
     int n_listener_threads,
     const toml_config& config)
 {
@@ -170,6 +176,7 @@ schedule_send_requests_event(
     dispatch_args->c = client;
     dispatch_args->requests = requests_pointer;
     dispatch_args->requests_semaphore = &requests_semaphore;
+    dispatch_args->start_barrier = & start_barrier;
     dispatch_args->n_listener_threads = n_listener_threads;
 	auto time = (struct timeval){1, 0};
 	auto send_event = evtimer_new(
@@ -184,18 +191,24 @@ start_client(const toml_config& config, unsigned short port, bool verbose)
     auto* client = make_ev_client(config);
     client->args = make_client_args(config, port, verbose);
 
-    sem_t requests_semaphore;
     auto n_listener_threads = toml::find<int>(
         config, "n_threads"
     );
+
+    sem_t requests_semaphore;
     sem_init(&requests_semaphore, 0, 0);
+    pthread_barrier_t start_barrier;
+    pthread_barrier_init(&start_barrier, NULL, n_listener_threads+1);
+
     schedule_send_requests_event(
-        client, requests_semaphore, n_listener_threads, config
+        client, requests_semaphore, start_barrier,
+        n_listener_threads, config
     );
     std::vector<std::thread> listener_threads;
     for (auto i = 0; i < n_listener_threads; i++) {
         listener_threads.emplace_back(
-            listen_server, client, port+i, std::ref(requests_semaphore)
+            listen_server, client, port+i, std::ref(requests_semaphore),
+            std::ref(start_barrier)
         );
     }
 
