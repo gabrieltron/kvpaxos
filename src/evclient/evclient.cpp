@@ -44,7 +44,7 @@ connect_to_proposer(
 
 void
 listen_server(
-	struct client* client, unsigned short port, sem_t& semaphore,
+	struct client* client, unsigned short port,
 	pthread_barrier_t& start_barrier
 ) {
 	auto fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -72,7 +72,6 @@ listen_server(
 	std::unordered_set<int> answered_requests;
 	pthread_barrier_wait(&start_barrier);
 	while (true) {
-		sem_post(&semaphore);
 		struct reply_message reply;
 		auto n_bytes = recv(fd, &reply, sizeof(reply_message), 0);
 		if (n_bytes == -1) {

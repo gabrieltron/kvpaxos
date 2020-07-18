@@ -29,9 +29,8 @@ using toml_config = toml::basic_value<
 struct dispatch_requests_args {
     client* c;
     std::vector<workload::Request>* requests;
-    sem_t* requests_semaphore;
     pthread_barrier_t* start_barrier;
-    int n_listener_threads;
+    int sleep_time, n_listener_threads;
 };
 
 
@@ -39,8 +38,8 @@ static void
 send_requests(
     client* c,
     const std::vector<workload::Request>& requests,
-    sem_t* semaphore,
     pthread_barrier_t* start_barrier,
+    int sleep_time,
     int n_listener_threads
 )
 {
@@ -50,7 +49,6 @@ send_requests(
     auto counter = 0;
     pthread_barrier_wait(start_barrier);
     for (auto& request: requests) {
-        sem_wait(semaphore);
         v->sin_port = htons(
             client_args->reply_port + (counter % n_listener_threads)
         );
@@ -69,11 +67,16 @@ send_requests(
             v->args[request.args().size()] = 0;
             v->size = request.args().size();
         }
+
         auto size = sizeof(struct client_message) + v->size;
         auto timestamp = std::chrono::system_clock::now();
         auto kv = std::make_pair(v->id, timestamp);
         client_args->sent_timestamp->insert(kv);
         paxos_submit(c->bev, c->send_buffer, size);
+
+        int ns = sleep_time / n_listener_threads;
+        std::this_thread::sleep_for(std::chrono::nanoseconds(ns));
+
         counter++;
     }
     delete &requests;
@@ -85,12 +88,12 @@ dispatch_requests_thread(evutil_socket_t fd, short event, void *arg)
     auto* dispatch_args = (dispatch_requests_args *)arg;
     auto* requests = (std::vector<workload::Request>*) dispatch_args->requests;
     auto* client = dispatch_args->c;
-    auto* semaphore = dispatch_args->requests_semaphore;
     auto* barrier = dispatch_args->start_barrier;
+    auto sleep_time = dispatch_args->sleep_time;
     auto n_listener_threads = dispatch_args->n_listener_threads;
     std::thread send_requests_thread(
-        send_requests, client, std::ref(*requests), semaphore,
-        barrier, n_listener_threads
+        send_requests, client, std::ref(*requests), barrier,
+        sleep_time, n_listener_threads
     );
     send_requests_thread.detach();
 }
@@ -162,7 +165,6 @@ free_client_args(struct client_args* client_args)
 static void
 schedule_send_requests_event(
     struct client* client,
-    sem_t& requests_semaphore,
     pthread_barrier_t& start_barrier,
     int n_listener_threads,
     const toml_config& config)
@@ -172,12 +174,17 @@ schedule_send_requests_event(
     );
     auto requests = std::move(workload::import_requests(requests_path, "requests"));
     auto* requests_pointer = new std::vector<workload::Request>(requests);
+    auto sleep_time = toml::find<int>(
+        config, "sleep_time"
+    );
+
     auto* dispatch_args = new struct dispatch_requests_args();
     dispatch_args->c = client;
     dispatch_args->requests = requests_pointer;
-    dispatch_args->requests_semaphore = &requests_semaphore;
     dispatch_args->start_barrier = & start_barrier;
+    dispatch_args->sleep_time = sleep_time;
     dispatch_args->n_listener_threads = n_listener_threads;
+
 	auto time = (struct timeval){1, 0};
 	auto send_event = evtimer_new(
         client->base, dispatch_requests_thread, dispatch_args
@@ -195,20 +202,16 @@ start_client(const toml_config& config, unsigned short port, bool verbose)
         config, "n_threads"
     );
 
-    sem_t requests_semaphore;
-    sem_init(&requests_semaphore, 0, 0);
     pthread_barrier_t start_barrier;
     pthread_barrier_init(&start_barrier, NULL, n_listener_threads+1);
 
     schedule_send_requests_event(
-        client, requests_semaphore, start_barrier,
-        n_listener_threads, config
+        client, start_barrier, n_listener_threads, config
     );
     std::vector<std::thread> listener_threads;
     for (auto i = 0; i < n_listener_threads; i++) {
         listener_threads.emplace_back(
-            listen_server, client, port+i, std::ref(requests_semaphore),
-            std::ref(start_barrier)
+            listen_server, client, port+i, std::ref(start_barrier)
         );
     }
 
