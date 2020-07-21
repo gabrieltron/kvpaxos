@@ -29,73 +29,59 @@ using toml_config = toml::basic_value<
 struct dispatch_requests_args {
     client* c;
     std::vector<workload::Request>* requests;
-    pthread_barrier_t* start_barrier;
-    int sleep_time, n_listener_threads;
+    int request_id, sleep_time, n_listener_threads;
 };
 
 
 static void
-send_requests(
-    client* c,
-    const std::vector<workload::Request>& requests,
-    pthread_barrier_t* start_barrier,
-    int sleep_time,
-    int n_listener_threads
-)
-{
-    auto* client_args = (struct client_args *) c->args;
-	auto* v = (struct client_message*)c->send_buffer;
-
-    auto counter = 0;
-    pthread_barrier_wait(start_barrier);
-    for (auto& request: requests) {
-        v->sin_port = htons(
-            client_args->reply_port + (counter % n_listener_threads)
-        );
-        v->id = counter;
-        v->type = request.type();
-        v->key = request.key();
-        if (request.args().empty()) {
-            memset(v->args, '#', VALUE_SIZE);
-            v->args[VALUE_SIZE] = '\0';
-            v->size = VALUE_SIZE;
-        }
-        else {
-            for (auto i = 0; i < request.args().size(); i++) {
-                v->args[i] = request.args()[i];
-            }
-            v->args[request.args().size()] = 0;
-            v->size = request.args().size();
-        }
-
-        auto size = sizeof(struct client_message) + v->size;
-        auto timestamp = std::chrono::system_clock::now();
-        auto kv = std::make_pair(v->id, timestamp);
-        client_args->sent_timestamp->insert(kv);
-        paxos_submit(c->bev, c->send_buffer, size);
-
-        int ns = sleep_time / n_listener_threads;
-        std::this_thread::sleep_for(std::chrono::nanoseconds(ns));
-
-        counter++;
-    }
-    delete &requests;
-}
-
-static void
-dispatch_requests_thread(evutil_socket_t fd, short event, void *arg)
+send_request(evutil_socket_t fd, short event, void *arg)
 {
     auto* dispatch_args = (dispatch_requests_args *)arg;
     auto* requests = (std::vector<workload::Request>*) dispatch_args->requests;
-    auto* client = dispatch_args->c;
-    auto* barrier = dispatch_args->start_barrier;
+    auto* c = dispatch_args->c;
+    auto requests_id = dispatch_args->request_id;
     auto sleep_time = dispatch_args->sleep_time;
     auto n_listener_threads = dispatch_args->n_listener_threads;
-    std::thread send_requests_thread(
-        send_requests, client, std::ref(*requests), barrier,
-        sleep_time, n_listener_threads
+
+    auto* client_args = (struct client_args *) c->args;
+	auto* v = (struct client_message*)c->send_buffer;
+
+    auto request = requests->at(requests_id);
+    v->sin_port = htons(
+        client_args->reply_port + (requests_id % n_listener_threads)
     );
-    send_requests_thread.detach();
+    v->id = requests_id;
+    v->type = request.type();
+    v->key = request.key();
+    if (request.args().empty()) {
+        memset(v->args, '#', VALUE_SIZE);
+        v->args[VALUE_SIZE] = '\0';
+        v->size = VALUE_SIZE;
+    }
+    else {
+        for (auto i = 0; i < request.args().size(); i++) {
+            v->args[i] = request.args()[i];
+        }
+        v->args[request.args().size()] = 0;
+        v->size = request.args().size();
+    }
+
+    auto size = sizeof(struct client_message) + v->size;
+    auto timestamp = std::chrono::system_clock::now();
+    auto kv = std::make_pair(v->id, timestamp);
+    client_args->sent_timestamp->insert(kv);
+    paxos_submit(c->bev, c->send_buffer, size);
+    requests_id++;
+
+    if (requests_id != requests->size()) {
+        dispatch_args->request_id++;
+        long delay = sleep_time / n_listener_threads;
+        auto time = (struct timeval){0, delay};
+        auto send_event = evtimer_new(
+            c->base, send_request, dispatch_args
+        );
+        event_add(send_event, &time);
+    }
 }
 
 static void
@@ -181,13 +167,13 @@ schedule_send_requests_event(
     auto* dispatch_args = new struct dispatch_requests_args();
     dispatch_args->c = client;
     dispatch_args->requests = requests_pointer;
-    dispatch_args->start_barrier = & start_barrier;
+    dispatch_args->request_id = 0;
     dispatch_args->sleep_time = sleep_time;
     dispatch_args->n_listener_threads = n_listener_threads;
 
 	auto time = (struct timeval){1, 0};
 	auto send_event = evtimer_new(
-        client->base, dispatch_requests_thread, dispatch_args
+        client->base, send_request, dispatch_args
     );
 	event_add(send_event, &time);
 }
@@ -205,16 +191,17 @@ start_client(const toml_config& config, unsigned short port, bool verbose)
     pthread_barrier_t start_barrier;
     pthread_barrier_init(&start_barrier, NULL, n_listener_threads+1);
 
-    schedule_send_requests_event(
-        client, start_barrier, n_listener_threads, config
-    );
     std::vector<std::thread> listener_threads;
     for (auto i = 0; i < n_listener_threads; i++) {
         listener_threads.emplace_back(
             listen_server, client, port+i, std::ref(start_barrier)
         );
     }
+    pthread_barrier_wait(&start_barrier);
 
+    schedule_send_requests_event(
+        client, start_barrier, n_listener_threads, config
+    );
 	event_base_loop(client->base, EVLOOP_NO_EXIT_ON_EMPTY);
 
     free_client_args((struct client_args *)client->args);
