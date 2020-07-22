@@ -131,7 +131,7 @@ requests_loop(
 		struct client_message client_message;
 		client_message.s_addr = htonl(0);
 		client_message.sin_port = htons(
-			answer_port + (counter % n_threads)
+			answer_port
 		);
 		client_message.id = counter;
 		client_message.type = request.type();
@@ -158,7 +158,7 @@ requests_loop(
 		queue_mutex.unlock();
 		sem_post(&requests_semaphore);
 
-		auto delay = sleep_time / n_threads;
+		auto delay = sleep_time;
 		std::this_thread::sleep_for(std::chrono::nanoseconds(delay));
 
 		counter++;
@@ -215,6 +215,9 @@ start_listener_threads(
 static void
 run(unsigned short port, const toml_config& config)
 {
+	auto n_threads = toml::find<int>(
+		config, "n_threads"
+	);
 	auto* scheduler = initialize_scheduler(config);
 	std::queue<struct client_message> requests_queue;
 	tbb::concurrent_unordered_map<int, time_point> timestamps;
@@ -234,13 +237,22 @@ run(unsigned short port, const toml_config& config)
 	auto throughput_thread = std::thread(
 		print_throughput, SLEEP, scheduler
 	);
-	auto requests_thread = std::thread(
-		requests_loop, std::ref(requests_queue), std::ref(timestamps),
-		std::ref(requests_semaphore), std::ref(queue_mutex),
-		port, config
-	);
 
-	requests_thread.join();
+	std::vector<std::thread*> requests_threads;
+	for (auto i = 0; i < n_threads; i++) {
+		auto* thread = new std::thread(
+			requests_loop, std::ref(requests_queue), std::ref(timestamps),
+			std::ref(requests_semaphore), std::ref(queue_mutex),
+			port+i, config
+		);
+		requests_threads.emplace_back(thread);
+	}
+
+	for (auto* thread: requests_threads) {
+		thread->join();
+		delete thread;
+	}
+
 	RUNNING = false;
 	throughput_thread.join();
 
@@ -252,7 +264,7 @@ run(unsigned short port, const toml_config& config)
 	std::this_thread::sleep_for(std::chrono::seconds(30));
 	execution_thread.~thread();
 
-	for (auto thread: listener_threads) {
+	for (auto* thread: listener_threads) {
 		thread->join();
 		delete thread;
 	}
