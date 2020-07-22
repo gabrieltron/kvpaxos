@@ -108,6 +108,7 @@ initialize_scheduler(const toml_config& config)
 
 static void
 requests_loop(
+	std::vector<workload::Request>& requests,
 	std::queue<struct client_message>& requests_queue,
 	tbb::concurrent_unordered_map<int, time_point>& timestamps,
 	sem_t& requests_semaphore,
@@ -115,9 +116,6 @@ requests_loop(
 	short answer_port,
 	const toml_config& config)
 {
-    auto requests_path = toml::find<std::string>(
-        config, "requests_path"
-    );
 	auto sleep_time = toml::find<int>(
 		config, "sleep_time"
 	);
@@ -126,7 +124,6 @@ requests_loop(
 	);
 
 	auto counter = 0;
-    auto requests = std::move(workload::import_requests(requests_path, "requests"));
 	for (auto& request: requests) {
 		struct client_message client_message;
 		client_message.s_addr = htonl(0);
@@ -239,9 +236,14 @@ run(unsigned short port, const toml_config& config)
 	);
 
 	std::vector<std::thread*> requests_threads;
+    auto requests_path = toml::find<std::string>(
+        config, "requests_path"
+    );
+	auto requests = std::move(workload::import_requests(requests_path, "requests"));
 	for (auto i = 0; i < n_threads; i++) {
 		auto* thread = new std::thread(
-			requests_loop, std::ref(requests_queue), std::ref(timestamps),
+			requests_loop, std::ref(requests),
+			std::ref(requests_queue), std::ref(timestamps),
 			std::ref(requests_semaphore), std::ref(queue_mutex),
 			port+i, config
 		);
