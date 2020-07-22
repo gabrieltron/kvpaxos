@@ -42,14 +42,30 @@ connect_to_proposer(
 	return bev;
 }
 
+static void
+read_reply(
+	const struct reply_message& reply,
+	tbb::concurrent_vector<time_point>& latencies,
+	tbb::concurrent_unordered_map<int, time_point>& timestamps)
+{
+    if (1 >= rand() % 100 + 1) {
+        auto now = std::chrono::system_clock::now();
+        auto latency = now - timestamps.at(reply.id);
+		latencies.emplace_back(latency);
+    }
+}
+
 void
 listen_server(
-	struct client* client, unsigned short port,
+	tbb::concurrent_vector<time_point>& latencies,
+	tbb::concurrent_unordered_map<int, time_point>& timestamps,
+	unsigned short port,
 	pthread_barrier_t& start_barrier
 ) {
 	auto fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd < 0) {
 		printf("Failed to create.");
+		fflush(stdout);
 		return;
 	}
 
@@ -61,6 +77,7 @@ listen_server(
 	auto binded = bind(fd, (const struct sockaddr *)&addr, sizeof(addr));
 	if (binded < 0) {
 		printf("Failed to bind to socket.");
+		fflush(stdout);
 		return;
 	}
 
@@ -82,7 +99,7 @@ listen_server(
 			continue;
 		}
 
-		client->reply_cb(reply, client->args);
+		read_reply(reply, latencies, timestamps);
 		answered_requests.insert(reply.id);
 	}
 }
