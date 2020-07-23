@@ -33,6 +33,8 @@
 #include <chrono>
 #include <iostream>
 #include <iterator>
+#include <queue>
+#include <semaphore.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string>
@@ -48,8 +50,8 @@
 
 #include "evclient/evclient.h"
 #include "request/request_generation.h"
+#include "storage/storage.h"
 #include "types/types.h"
-#include "scheduler/scheduler.hpp"
 #include "graph/graph.hpp"
 
 
@@ -64,35 +66,96 @@ static bool RUNNING = true;
 const int VALUE_SIZE = 128;
 
 
+static struct sockaddr_in
+get_client_addr(unsigned long ip, unsigned short port)
+{
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = ip;
+    addr.sin_port = port;
+    return addr;
+}
+
+static void
+answer_client(const char* answer, size_t length,
+    client_message& message, int fd)
+{
+    auto client_addr = get_client_addr(message.s_addr, message.sin_port);
+    auto bytes_written = sendto(
+        fd, answer, length, 0,
+        (const struct sockaddr *) &client_addr, sizeof(client_addr)
+    );
+    if (bytes_written < 0) {
+        printf("Failed to send answer\n");
+    }
+}
+
+static std::string
+execute_request(
+	kvstorage::Storage& storage,
+	int key,
+	request_type type,
+	const std::string& args
+)
+{
+    std::string answer;
+    switch (type)
+    {
+    case READ:
+    {
+        answer = std::move(storage.read(key));
+        break;
+    }
+
+    case WRITE:
+    {
+        storage.write(key, args);
+        answer = args;
+        break;
+    }
+
+    case SCAN:
+    {
+        auto length = std::stoi(args);
+        auto values = std::move(storage.scan(key, length));
+
+        std::ostringstream oss;
+        std::copy(values.begin(), values.end(), std::ostream_iterator<std::string>(oss, ","));
+        answer = std::string(oss.str());
+
+        std::vector<int> keys(length);
+        std::iota(keys.begin(), keys.end(), 1);
+        break;
+    }
+
+    case ERROR:
+        answer = "ERROR";
+        break;
+    default:
+        break;
+    }
+
+	return answer;
+}
+
 void
-print_throughput(int sleep_duration, kvpaxos::Scheduler<int>* scheduler)
+print_throughput(int sleep_duration, int& n_executed_requests)
 {
 	auto already_counted = 0;
 	while (RUNNING) {
 		std::this_thread::sleep_for(std::chrono::seconds(sleep_duration));
-		auto throughput = scheduler->n_executed_requests() - already_counted;
+		auto throughput = n_executed_requests - already_counted;
 		std::cout << std::chrono::system_clock::now().time_since_epoch().count() << ",";
 		std::cout << throughput << "\n";
+
 		already_counted += throughput;
 	}
 }
 
-static kvpaxos::Scheduler<int>*
-initialize_scheduler(const toml_config& config)
+static kvstorage::Storage
+initialize_storage(const toml_config& config)
 {
-	auto repartition_method_s = toml::find<std::string>(
-		config, "repartition_method"
-	);
-	auto repartition_method = model::string_to_cut_method.at(
-		repartition_method_s
-	);
-	auto repartition_interval = toml::find<int>(
-		config, "repartition_interval"
-	);
-	auto* scheduler = new kvpaxos::Scheduler<int>(
-		repartition_interval, N_PARTITIONS, repartition_method
-	);
-
+	auto storage = kvstorage::Storage();
 	auto initial_requests = toml::find<std::vector<std::string>>(
 		config, "requests_path"
 	);
@@ -100,10 +163,16 @@ initialize_scheduler(const toml_config& config)
 		auto populate_requests = std::move(
 			workload::import_requests(initial_requests[0], "load_requests")
 		);
-		scheduler->process_populate_requests(populate_requests);
+
+		for (auto& request : populate_requests) {
+			auto key = request.key();
+			auto type = static_cast<request_type>(request.type());
+			auto args = request.args();
+			execute_request(storage, key, type, args);
+		}
 	}
 
-	return scheduler;
+	return storage;
 }
 
 static void
@@ -164,12 +233,13 @@ requests_loop(
 
 static void
 execution_loop(
-	kvpaxos::Scheduler<int>* scheduler,
+	kvstorage::Storage& storage,
 	std::queue<struct client_message>& requests_queue,
 	sem_t& requests_semaphore,
-	std::mutex& queue_mutex)
+	std::mutex& queue_mutex,
+	int& n_executed_requests)
 {
-	scheduler->run();
+	auto socket_fd_ = socket(AF_INET, SOCK_DGRAM, 0);
 	while(true) {
 		sem_wait(&requests_semaphore);
 
@@ -178,7 +248,20 @@ execution_loop(
 			requests_queue.pop();
 		queue_mutex.unlock();
 
-		scheduler->schedule_and_answer(request);
+		auto key = request.key;
+		auto type = static_cast<request_type>(request.type);
+		auto request_args = std::string(request.args);
+		auto answer = execute_request(storage, key, type, request_args);
+
+	    reply_message reply;
+	    reply.id = request.id;
+	    strncpy(reply.answer, answer.c_str(), answer.size());
+	    reply.answer[answer.size()] = '\0';
+		answer_client(
+			(char *)&reply, sizeof(reply_message), request,
+			socket_fd_
+		);
+		n_executed_requests++;
 	}
 }
 
@@ -200,7 +283,7 @@ start_listener_threads(
     for (auto i = 0; i < n_listener_threads; i++) {
 		auto* thread = new std::thread(
 			listen_server, std::ref(latencies), std::ref(timestamps),
-			 port+i, std::ref(start_barrier)
+			port+i, std::ref(start_barrier)
 		);
         listener_threads.emplace_back(thread);
     }
@@ -215,7 +298,7 @@ run(unsigned short port, const toml_config& config)
 	auto n_threads = toml::find<int>(
 		config, "n_threads"
 	);
-	auto* scheduler = initialize_scheduler(config);
+	auto storage = initialize_storage(config);
 	std::queue<struct client_message> requests_queue;
 	tbb::concurrent_unordered_map<int, time_point> timestamps;
 	tbb::concurrent_vector<time_point> latencies;
@@ -227,12 +310,14 @@ run(unsigned short port, const toml_config& config)
 		latencies, timestamps, port, config
 	);
 
+	int n_executed_requests = 0;
 	auto execution_thread = std::thread(
-		execution_loop, scheduler, std::ref(requests_queue),
-		std::ref(requests_semaphore), std::ref(queue_mutex)
+		execution_loop, std::ref(storage), std::ref(requests_queue),
+		std::ref(requests_semaphore), std::ref(queue_mutex),
+		std::ref(n_executed_requests)
 	);
 	auto throughput_thread = std::thread(
-		print_throughput, SLEEP, scheduler
+		print_throughput, SLEEP, std::ref(n_executed_requests)
 	);
 
 	std::vector<std::thread*> requests_threads;
