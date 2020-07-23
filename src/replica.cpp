@@ -93,12 +93,12 @@ initialize_scheduler(const toml_config& config)
 		repartition_interval, N_PARTITIONS, repartition_method
 	);
 
-	auto initial_requests = toml::find<std::string>(
+	auto initial_requests = toml::find<std::vector<std::string>>(
 		config, "requests_path"
 	);
 	if (not initial_requests.empty()) {
 		auto populate_requests = std::move(
-			workload::import_requests(initial_requests, "load_requests")
+			workload::import_requests(initial_requests[0], "load_requests")
 		);
 		scheduler->process_populate_requests(populate_requests);
 	}
@@ -108,9 +108,10 @@ initialize_scheduler(const toml_config& config)
 
 static void
 requests_loop(
-	std::vector<workload::Request>& requests,
+	std::string& requests_path,
 	std::queue<struct client_message>& requests_queue,
 	tbb::concurrent_unordered_map<int, time_point>& timestamps,
+	pthread_barrier_t& start_barrier,
 	sem_t& requests_semaphore,
 	std::mutex& queue_mutex,
 	short answer_port,
@@ -119,11 +120,10 @@ requests_loop(
 	auto sleep_time = toml::find<int>(
 		config, "sleep_time"
 	);
-	auto n_threads = toml::find<int>(
-		config, "n_threads"
-	);
 
 	auto counter = 0;
+	auto requests = std::move(workload::import_requests(requests_path, "requests"));
+	pthread_barrier_wait(&start_barrier);
 	for (auto& request: requests) {
 		struct client_message client_message;
 		client_message.s_addr = htonl(0);
@@ -236,15 +236,16 @@ run(unsigned short port, const toml_config& config)
 	);
 
 	std::vector<std::thread*> requests_threads;
-    auto requests_path = toml::find<std::string>(
+    auto requests_path = toml::find<std::vector<std::string>>(
         config, "requests_path"
     );
-	auto requests = std::move(workload::import_requests(requests_path, "requests"));
+	pthread_barrier_t start_barrier;
+	pthread_barrier_init(&start_barrier, NULL, n_threads);
 	for (auto i = 0; i < n_threads; i++) {
 		auto* thread = new std::thread(
-			requests_loop, std::ref(requests),
+			requests_loop, std::ref(requests_path[i % requests_path.size()]),
 			std::ref(requests_queue), std::ref(timestamps),
-			std::ref(requests_semaphore), std::ref(queue_mutex),
+			std::ref(start_barrier), std::ref(requests_semaphore), std::ref(queue_mutex),
 			port+i, config
 		);
 		requests_threads.emplace_back(thread);
