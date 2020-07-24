@@ -39,11 +39,12 @@
 #include <string.h>
 #include <sstream>
 #include <signal.h>
+#include <mutex>
+#include <netinet/tcp.h>
 #include <tbb/concurrent_unordered_map.h>
 #include <tbb/concurrent_vector.h>
 #include <thread>
-#include <mutex>
-#include <netinet/tcp.h>
+#include <unordered_map>
 #include <vector>
 
 #include "evclient/evclient.h"
@@ -78,7 +79,10 @@ print_throughput(int sleep_duration, kvpaxos::Scheduler<int>* scheduler)
 }
 
 static kvpaxos::Scheduler<int>*
-initialize_scheduler(const toml_config& config)
+initialize_scheduler(
+	int n_requests,
+	pthread_barrier_t* end_barrier,
+	const toml_config& config)
 {
 	auto repartition_method_s = toml::find<std::string>(
 		config, "repartition_method"
@@ -90,47 +94,35 @@ initialize_scheduler(const toml_config& config)
 		config, "repartition_interval"
 	);
 	auto* scheduler = new kvpaxos::Scheduler<int>(
-		repartition_interval, N_PARTITIONS, repartition_method
+		n_requests, repartition_interval, N_PARTITIONS,
+		repartition_method, end_barrier
 	);
 
-	auto initial_requests = toml::find<std::vector<std::string>>(
+	auto initial_requests = toml::find<std::string>(
 		config, "requests_path"
 	);
 	if (not initial_requests.empty()) {
 		auto populate_requests = std::move(
-			workload::import_requests(initial_requests[0], "load_requests")
+			workload::import_requests(initial_requests, "load_requests")
 		);
 		scheduler->process_populate_requests(populate_requests);
 	}
 
+	scheduler->run();
 	return scheduler;
 }
 
-static void
-requests_loop(
-	std::string& requests_path,
-	std::queue<struct client_message>& requests_queue,
-	tbb::concurrent_unordered_map<int, time_point>& timestamps,
-	pthread_barrier_t& start_barrier,
-	sem_t& requests_semaphore,
-	std::mutex& queue_mutex,
-	short answer_port,
-	const toml_config& config)
+std::vector<struct client_message>
+to_client_messages(
+	std::vector<workload::Request>& requests)
 {
-	auto sleep_time = toml::find<int>(
-		config, "sleep_time"
-	);
-
+	std::vector<struct client_message> client_messages;
 	auto counter = 0;
-	auto requests = std::move(workload::import_requests(requests_path, "requests"));
-	pthread_barrier_wait(&start_barrier);
-	for (auto& request: requests) {
+	for (auto i = 0; i < requests.size(); i++) {
+		auto& request = requests[i];
 		struct client_message client_message;
-		client_message.s_addr = htonl(0);
-		client_message.sin_port = htons(
-			answer_port
-		);
-		client_message.id = counter;
+		client_message.sin_port = htons(0);
+		client_message.id = i;
 		client_message.type = request.type();
 		client_message.key = request.key();
 		if (request.args().empty()) {
@@ -145,133 +137,97 @@ requests_loop(
 			client_message.args[request.args().size()] = 0;
 			client_message.size = request.args().size();
 		}
+		client_message.record_timestamp = false;
 
-		auto timestamp = std::chrono::system_clock::now();
-		auto kv = std::make_pair(client_message.id, timestamp);
-		timestamps.insert(kv);
-
-		queue_mutex.lock();
-			requests_queue.push(client_message);
-		queue_mutex.unlock();
-		sem_post(&requests_semaphore);
-
-		auto delay = sleep_time;
-		std::this_thread::sleep_for(std::chrono::nanoseconds(delay));
-
-		counter++;
+		client_messages.emplace_back(client_message);
 	}
+
+	return client_messages;
 }
 
-static void
-execution_loop(
-	kvpaxos::Scheduler<int>* scheduler,
-	std::queue<struct client_message>& requests_queue,
-	sem_t& requests_semaphore,
-	std::mutex& queue_mutex)
+static std::unordered_map<int, time_point>
+execute_requests(
+	kvpaxos::Scheduler<int>& scheduler,
+	std::vector<struct client_message>& requests,
+	int print_percentage,
+	pthread_barrier_t* end_barrier)
 {
-	scheduler->run();
-	while(true) {
-		sem_wait(&requests_semaphore);
+	srand (time(NULL));
+	std::unordered_map<int, time_point> end_timestamp;
 
-		queue_mutex.lock();
-			auto request = requests_queue.front();
-			requests_queue.pop();
-		queue_mutex.unlock();
-
-		scheduler->schedule_and_answer(request);
+	for (auto& request: requests) {
+		if (print_percentage >= rand() % 100 + 1) {
+	    	auto timestamp = std::chrono::system_clock::now();
+    		auto kv = std::make_pair(request.id, timestamp);
+    		end_timestamp.insert(kv);
+			request.record_timestamp = true;
+		}
+		scheduler.schedule_and_answer(request);
 	}
+	pthread_barrier_wait(end_barrier);
+	return end_timestamp;
 }
 
-static std::vector<std::thread*>
-start_listener_threads(
-	tbb::concurrent_vector<time_point>& latencies,
-	tbb::concurrent_unordered_map<int, time_point>& timestamps,
-	unsigned short port,
-	const toml_config& config)
+bool sort_pair(const std::pair<int,time_point> &a,
+              const std::pair<int,time_point> &b)
 {
-	std::vector<std::thread*> listener_threads;
-	auto n_listener_threads = toml::find<int>(
-        config, "n_threads"
-    );
+    return (a.second.time_since_epoch().count() < b.second.time_since_epoch().count());
+}
 
-    pthread_barrier_t start_barrier;
-    pthread_barrier_init(&start_barrier, NULL, n_listener_threads+1);
-
-    for (auto i = 0; i < n_listener_threads; i++) {
-		auto* thread = new std::thread(
-			listen_server, std::ref(latencies), std::ref(timestamps),
-			 port+i, std::ref(start_barrier)
+static std::vector<std::pair<int, time_point>>
+order_execution_timestamps(kvpaxos::Scheduler<int>& scheduler)
+{
+	std::vector<std::pair<int, time_point>> ordered_timestamps;
+	auto timestamp_vectors = scheduler.execution_timestamps();
+	for (auto& timestamp_vector: timestamp_vectors) {
+		ordered_timestamps.insert(
+			ordered_timestamps.end(),
+			std::make_move_iterator(timestamp_vector.begin()),
+			std::make_move_iterator(timestamp_vector.end())
 		);
-        listener_threads.emplace_back(thread);
-    }
-    pthread_barrier_wait(&start_barrier);
+	}
 
-	return listener_threads;
+	std::sort(
+		ordered_timestamps.begin(),
+		ordered_timestamps.end(),
+		sort_pair
+	);
+
+	return ordered_timestamps;
 }
 
 static void
 run(unsigned short port, const toml_config& config)
 {
-	auto n_threads = toml::find<int>(
-		config, "n_threads"
+	auto requests_path = toml::find<std::string>(
+		config, "requests_path"
 	);
-	auto* scheduler = initialize_scheduler(config);
-	std::queue<struct client_message> requests_queue;
-	tbb::concurrent_unordered_map<int, time_point> timestamps;
-	tbb::concurrent_vector<time_point> latencies;
-	sem_t requests_semaphore;
-	sem_init(&requests_semaphore, 0, 0);
-	std::mutex queue_mutex;
+	auto requests = std::move(workload::import_requests(requests_path, "requests"));
+	auto* end_barrier = new pthread_barrier_t();
+	pthread_barrier_init(end_barrier, NULL, 2);
+	auto* scheduler = initialize_scheduler(requests.size(), end_barrier, config);
 
-	auto listener_threads = start_listener_threads(
-		latencies, timestamps, port, config
-	);
-
-	auto execution_thread = std::thread(
-		execution_loop, scheduler, std::ref(requests_queue),
-		std::ref(requests_semaphore), std::ref(queue_mutex)
-	);
 	auto throughput_thread = std::thread(
 		print_throughput, SLEEP, scheduler
 	);
 
-	std::vector<std::thread*> requests_threads;
-    auto requests_path = toml::find<std::vector<std::string>>(
-        config, "requests_path"
-    );
-	pthread_barrier_t start_barrier;
-	pthread_barrier_init(&start_barrier, NULL, n_threads);
-	for (auto i = 0; i < n_threads; i++) {
-		auto* thread = new std::thread(
-			requests_loop, std::ref(requests_path[i % requests_path.size()]),
-			std::ref(requests_queue), std::ref(timestamps),
-			std::ref(start_barrier), std::ref(requests_semaphore), std::ref(queue_mutex),
-			port+i, config
-		);
-		requests_threads.emplace_back(thread);
-	}
+	auto print_percentage = toml::find<int>(
+		config, "print_percentage"
+	);
+	auto client_messages = to_client_messages(requests);
+	auto send_timestamps = execute_requests(
+		*scheduler, client_messages, print_percentage, end_barrier
+	);
+	auto execution_timestamps = order_execution_timestamps(*scheduler);
 
-	for (auto* thread: requests_threads) {
-		thread->join();
-		delete thread;
-	}
+	for (auto& kv: execution_timestamps) {
+		auto id = kv.first;
+		auto execution_timestamp = kv.second;
 
-	RUNNING = false;
-	throughput_thread.join();
-
-	for (auto i = 0; i < latencies.size(); i++) {
-		std::cout << i << "," << latencies.at(i).time_since_epoch().count() << "\n";
+		auto delay = execution_timestamp - send_timestamps[id];
+		std::cout << id << "," << delay.count() << "\n";
 	}
 	std::cout << std::endl;
-
-	std::this_thread::sleep_for(std::chrono::seconds(30));
-	execution_thread.~thread();
-
-	for (auto* thread: listener_threads) {
-		thread->join();
-		delete thread;
-	}
-
 }
 
 static void
