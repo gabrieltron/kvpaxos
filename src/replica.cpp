@@ -99,7 +99,7 @@ initialize_scheduler(
 	);
 
 	auto initial_requests = toml::find<std::string>(
-		config, "requests_path"
+		config, "load_requests_path"
 	);
 	if (not initial_requests.empty()) {
 		auto populate_requests = std::move(
@@ -202,7 +202,7 @@ run(unsigned short port, const toml_config& config)
 	auto requests_path = toml::find<std::string>(
 		config, "requests_path"
 	);
-	auto requests = std::move(workload::import_requests(requests_path, "requests"));
+	auto requests = std::move(workload::import_cs_requests(requests_path));
 	auto* end_barrier = new pthread_barrier_t();
 	pthread_barrier_init(end_barrier, NULL, 2);
 	auto* scheduler = initialize_scheduler(requests.size(), end_barrier, config);
@@ -215,6 +215,7 @@ run(unsigned short port, const toml_config& config)
 		config, "print_percentage"
 	);
 	auto client_messages = to_client_messages(requests);
+
 	auto send_timestamps = execute_requests(
 		*scheduler, client_messages, print_percentage, end_barrier
 	);
