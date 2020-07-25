@@ -41,11 +41,12 @@
 #include <string.h>
 #include <sstream>
 #include <signal.h>
+#include <mutex>
+#include <netinet/tcp.h>
 #include <tbb/concurrent_unordered_map.h>
 #include <tbb/concurrent_vector.h>
 #include <thread>
-#include <mutex>
-#include <netinet/tcp.h>
+#include <unordered_map>
 #include <vector>
 
 #include "evclient/evclient.h"
@@ -156,12 +157,12 @@ static kvstorage::Storage
 initialize_storage(const toml_config& config)
 {
 	auto storage = kvstorage::Storage();
-	auto initial_requests = toml::find<std::vector<std::string>>(
+	auto initial_requests = toml::find<std::string>(
 		config, "requests_path"
 	);
 	if (not initial_requests.empty()) {
 		auto populate_requests = std::move(
-			workload::import_requests(initial_requests[0], "load_requests")
+			workload::import_requests(initial_requests, "load_requests")
 		);
 
 		for (auto& request : populate_requests) {
@@ -175,31 +176,17 @@ initialize_storage(const toml_config& config)
 	return storage;
 }
 
-static void
-requests_loop(
-	std::string& requests_path,
-	std::queue<struct client_message>& requests_queue,
-	tbb::concurrent_unordered_map<int, time_point>& timestamps,
-	pthread_barrier_t& start_barrier,
-	sem_t& requests_semaphore,
-	std::mutex& queue_mutex,
-	short answer_port,
-	const toml_config& config)
+std::vector<struct client_message>
+to_client_messages(
+	std::vector<workload::Request>& requests)
 {
-	auto sleep_time = toml::find<int>(
-		config, "sleep_time"
-	);
-
+	std::vector<struct client_message> client_messages;
 	auto counter = 0;
-	auto requests = std::move(workload::import_requests(requests_path, "requests"));
-	pthread_barrier_wait(&start_barrier);
-	for (auto& request: requests) {
+	for (auto i = 0; i < requests.size(); i++) {
+		auto& request = requests[i];
 		struct client_message client_message;
-		client_message.s_addr = htonl(0);
-		client_message.sin_port = htons(
-			answer_port
-		);
-		client_message.id = counter;
+		client_message.sin_port = htons(0);
+		client_message.id = i;
 		client_message.type = request.type();
 		client_message.key = request.key();
 		if (request.args().empty()) {
@@ -214,149 +201,76 @@ requests_loop(
 			client_message.args[request.args().size()] = 0;
 			client_message.size = request.args().size();
 		}
+		client_message.record_timestamp = false;
 
-		auto timestamp = std::chrono::system_clock::now();
-		auto kv = std::make_pair(client_message.id, timestamp);
-		timestamps.insert(kv);
-
-		queue_mutex.lock();
-			requests_queue.push(client_message);
-		queue_mutex.unlock();
-		sem_post(&requests_semaphore);
-
-		auto delay = sleep_time;
-		std::this_thread::sleep_for(std::chrono::nanoseconds(delay));
-
-		counter++;
+		client_messages.emplace_back(client_message);
 	}
+
+	return client_messages;
 }
 
-static void
-execution_loop(
+static std::vector<time_point>
+execute_requests(
 	kvstorage::Storage& storage,
-	std::queue<struct client_message>& requests_queue,
-	sem_t& requests_semaphore,
-	std::mutex& queue_mutex,
+	std::vector<struct client_message>& requests,
+	int print_percentage,
 	int& n_executed_requests)
 {
-	auto socket_fd_ = socket(AF_INET, SOCK_DGRAM, 0);
-	while(true) {
-		sem_wait(&requests_semaphore);
+	srand (time(NULL));
+	std::vector<time_point> delays;
 
-		queue_mutex.lock();
-			auto request = requests_queue.front();
-			requests_queue.pop();
-		queue_mutex.unlock();
+	for (auto& request: requests) {
+		time_point send_timestamp;
+		if (print_percentage >= rand() % 100 + 1) {
+	    	auto send_timestamp = std::chrono::system_clock::now();
+			request.record_timestamp = true;
+		}
 
 		auto key = request.key;
 		auto type = static_cast<request_type>(request.type);
-		auto request_args = std::string(request.args);
-		auto answer = execute_request(storage, key, type, request_args);
-
-	    reply_message reply;
-	    reply.id = request.id;
-	    strncpy(reply.answer, answer.c_str(), answer.size());
-	    reply.answer[answer.size()] = '\0';
-		answer_client(
-			(char *)&reply, sizeof(reply_message), request,
-			socket_fd_
-		);
+		auto args = request.args;
+		execute_request(storage, key, type, args);
 		n_executed_requests++;
+
+		if (request.record_timestamp) {
+			auto delay = std::chrono::system_clock::now() - send_timestamp;
+			delays.emplace_back(delay);
+		}
 	}
-}
-
-static std::vector<std::thread*>
-start_listener_threads(
-	tbb::concurrent_vector<time_point>& latencies,
-	tbb::concurrent_unordered_map<int, time_point>& timestamps,
-	unsigned short port,
-	const toml_config& config)
-{
-	std::vector<std::thread*> listener_threads;
-	auto n_listener_threads = toml::find<int>(
-        config, "n_threads"
-    );
-
-    pthread_barrier_t start_barrier;
-    pthread_barrier_init(&start_barrier, NULL, n_listener_threads+1);
-
-    for (auto i = 0; i < n_listener_threads; i++) {
-		auto* thread = new std::thread(
-			listen_server, std::ref(latencies), std::ref(timestamps),
-			port+i, std::ref(start_barrier)
-		);
-        listener_threads.emplace_back(thread);
-    }
-    pthread_barrier_wait(&start_barrier);
-
-	return listener_threads;
+	return delays;
 }
 
 static void
 run(unsigned short port, const toml_config& config)
 {
-	auto n_threads = toml::find<int>(
-		config, "n_threads"
+	auto requests_path = toml::find<std::string>(
+		config, "requests_path"
 	);
+	auto requests = std::move(workload::import_requests(requests_path, "requests"));
 	auto storage = initialize_storage(config);
-	std::queue<struct client_message> requests_queue;
-	tbb::concurrent_unordered_map<int, time_point> timestamps;
-	tbb::concurrent_vector<time_point> latencies;
-	sem_t requests_semaphore;
-	sem_init(&requests_semaphore, 0, 0);
-	std::mutex queue_mutex;
 
-	auto listener_threads = start_listener_threads(
-		latencies, timestamps, port, config
-	);
-
-	int n_executed_requests = 0;
-	auto execution_thread = std::thread(
-		execution_loop, std::ref(storage), std::ref(requests_queue),
-		std::ref(requests_semaphore), std::ref(queue_mutex),
-		std::ref(n_executed_requests)
-	);
+	auto n_executed_requests = 0;
 	auto throughput_thread = std::thread(
 		print_throughput, SLEEP, std::ref(n_executed_requests)
 	);
 
-	std::vector<std::thread*> requests_threads;
-    auto requests_path = toml::find<std::vector<std::string>>(
-        config, "requests_path"
-    );
-	pthread_barrier_t start_barrier;
-	pthread_barrier_init(&start_barrier, NULL, n_threads);
-	for (auto i = 0; i < n_threads; i++) {
-		auto* thread = new std::thread(
-			requests_loop, std::ref(requests_path[i % requests_path.size()]),
-			std::ref(requests_queue), std::ref(timestamps),
-			std::ref(start_barrier), std::ref(requests_semaphore), std::ref(queue_mutex),
-			port+i, config
-		);
-		requests_threads.emplace_back(thread);
-	}
+	auto print_percentage = toml::find<int>(
+		config, "print_percentage"
+	);
+	auto client_messages = to_client_messages(requests);
 
-	for (auto* thread: requests_threads) {
-		thread->join();
-		delete thread;
-	}
+	auto delays = execute_requests(
+		storage, client_messages, print_percentage, n_executed_requests
+	);
 
 	RUNNING = false;
-	throughput_thread.join();
+	std::this_thread::sleep_for(std::chrono::seconds(1));
 
-	for (auto i = 0; i < latencies.size(); i++) {
-		std::cout << i << "," << latencies.at(i).time_since_epoch().count() << "\n";
+	for (auto i = 0; i < delays.size(); i++) {
+		auto& delay = delays[i];
+		std::cout << i << "," << delay.time_since_epoch().count() << "\n";
 	}
 	std::cout << std::endl;
-
-	std::this_thread::sleep_for(std::chrono::seconds(30));
-	execution_thread.~thread();
-
-	for (auto* thread: listener_threads) {
-		thread->join();
-		delete thread;
-	}
-
 }
 
 static void

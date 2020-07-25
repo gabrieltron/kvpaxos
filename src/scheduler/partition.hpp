@@ -3,6 +3,7 @@
 
 
 #include <arpa/inet.h>
+#include <chrono>
 #include <evpaxos.h>
 #include <pthread.h>
 #include <queue>
@@ -19,6 +20,7 @@
 #include <unistd.h>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 #include "graph/graph.hpp"
 #include "request/request.hpp"
@@ -31,8 +33,10 @@ namespace kvpaxos {
 template <typename T>
 class Partition {
 public:
-    Partition(int id)
+    Partition(int id, int n_requests, pthread_barrier_t* end_barrier)
         : id_{id},
+          n_requests_{n_requests},
+          end_barrier_{end_barrier},
           executing_{true}
     {
         socket_fd_ = socket(AF_INET, SOCK_DGRAM, 0);
@@ -96,6 +100,10 @@ public:
 
     const std::unordered_set<T>& data() const {
         return data_set_;
+    }
+
+    const std::vector<std::pair<int, time_point>>& execution_timestamps() const {
+        return execution_timestamps_;
     }
 
     static const model::Graph<T>& workload_graph() {
@@ -238,25 +246,38 @@ private:
             strncpy(reply.answer, answer.c_str(), answer.size());
             reply.answer[answer.size()] = '\0';
 
-            answer_client((char *)&reply, sizeof(reply_message), request);
+            //answer_client((char *)&reply, sizeof(reply_message), request);
 
-            std::lock_guard<std::mutex> lk(executed_requests_mutex_);
-            n_executed_requests_++;
+            if (request.record_timestamp) {
+                auto timestamp = std::chrono::system_clock::now();
+                execution_timestamps_.emplace_back(request.id, timestamp);
+            }
+
+            {
+                std::lock_guard<std::mutex> lk(executed_requests_mutex_);
+                n_executed_requests_++;
+            }
+
+            if (n_executed_requests_ == n_requests_) {
+                pthread_barrier_wait(end_barrier_);
+            }
         }
     }
 
-    int id_, socket_fd_;
+    int id_, n_requests_, socket_fd_;
     static kvstorage::Storage storage_;
     static model::Graph<T> workload_graph_;
     static int n_executed_requests_;
     static std::mutex executed_requests_mutex_;
 
     bool executing_;
+    pthread_barrier_t* end_barrier_;
     std::thread worker_thread_;
     sem_t semaphore_;
     std::queue<struct client_message> requests_queue_;
     std::mutex queue_mutex_;
     static std::shared_mutex execution_mutex_;
+    std::vector<std::pair<int, time_point>> execution_timestamps_;
 
     int total_weight_ = 0;
     std::unordered_set<T> data_set_;

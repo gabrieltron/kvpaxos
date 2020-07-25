@@ -13,6 +13,7 @@
 #include <string.h>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "graph/partitioning.h"
@@ -28,15 +29,18 @@ template <typename T>
 class Scheduler {
 public:
 
-    Scheduler(int repartition_interval,
+    Scheduler(int n_requests,
+                int repartition_interval,
                 int n_partitions,
-                model::CutMethod repartition_method
+                model::CutMethod repartition_method,
+                pthread_barrier_t* end_barrier
     ) : n_partitions_{n_partitions},
         repartition_interval_{repartition_interval},
         repartition_method_{repartition_method}
     {
         for (auto i = 0; i < n_partitions_; i++) {
-            partitions_.emplace(i, i);
+            auto* partition = new Partition<T>(i, n_requests, end_barrier);
+            partitions_.emplace(i, partition);
         }
         data_to_partition_ = new std::unordered_map<T, Partition<T>*>();
 
@@ -46,6 +50,9 @@ public:
     }
 
     ~Scheduler() {
+        for (auto partition: partitions_) {
+            delete partition;
+        }
         delete data_to_partition_;
     }
 
@@ -58,7 +65,7 @@ public:
 
     void run() {
         for (auto& kv : partitions_) {
-            kv.second.start_worker_thread();
+            kv.second->start_worker_thread();
         }
     }
 
@@ -81,7 +88,7 @@ public:
         auto partitions = std::move(involved_partitions(request));
         if (partitions.empty()) {
             request.type = ERROR;
-            return partitions_.at(0).push_request(request);
+            return partitions_.at(0)->push_request(request);
         }
 
         auto arbitrary_partition = *begin(partitions);
@@ -107,6 +114,15 @@ public:
         }
     }
 
+    std::vector<std::vector<std::pair<int, time_point>>>
+    execution_timestamps() const {
+        std::vector<std::vector<std::pair<int, time_point>>> timestamps;
+        for (auto& kv: partitions_) {
+            auto& partition = kv.second;
+            timestamps.emplace_back(partition->execution_timestamps());
+        }
+        return timestamps;
+    }
 private:
     std::unordered_set<Partition<T>*> involved_partitions(
         const struct client_message& request)
@@ -156,15 +172,15 @@ private:
     void sync_all_partitions() {
         std::unordered_set<Partition<T>*> partitions;
         for (auto i = 0; i < partitions_.size(); i++) {
-            partitions.insert(&partitions_.at(i));
+            partitions.insert(partitions_.at(i));
         }
         sync_partitions(partitions);
     }
 
     void add_key(T key) {
         auto partition_id = round_robin_counter_;
-        partitions_.at(partition_id).insert_data(key);
-        data_to_partition_->emplace(key, &partitions_.at(partition_id));
+        partitions_.at(partition_id)->insert_data(key);
+        data_to_partition_->emplace(key, partitions_.at(partition_id));
 
         round_robin_counter_ = (round_robin_counter_+1) % n_partitions_;
     }
@@ -192,7 +208,7 @@ private:
                     fflush(stdout);
                 }
                 auto data = sorted_vertex[i];
-                data_to_partition_->emplace(data, &partitions_.at(partition));
+                data_to_partition_->emplace(data, partitions_.at(partition));
             }
 
             pthread_barrier_wait(&finish_repartition_barrier_);
@@ -204,7 +220,7 @@ private:
     int sync_counter_ = 0;
     int n_dispatched_requests_ = 0;
     kvstorage::Storage storage_;
-    std::unordered_map<int, Partition<T>> partitions_;
+    std::unordered_map<int, Partition<T>*> partitions_;
     std::unordered_map<T, Partition<T>*>* data_to_partition_;
 
     model::CutMethod repartition_method_;
