@@ -2,8 +2,10 @@
 #define WORKLOAD_REQUEST_GENERATOR_H
 
 #include <algorithm>
+#include <fstream>
 #include <functional>
 #include <random>
+#include <sstream>
 #include <unordered_set>
 #include <vector>
 
@@ -16,6 +18,7 @@ namespace workload {
 typedef toml::basic_value<toml::discard_comments, std::unordered_map> toml_config;
 
 std::vector<Request> import_requests(const std::string& file_path, const std::string& field);
+std::vector<Request> import_cs_requests(const std::string& file_path);
 
 /*
 Those generations were made for a simpler execution that doesn't differentiate

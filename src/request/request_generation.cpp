@@ -3,6 +3,52 @@
 
 namespace workload {
 
+Request make_request(char* type_buffer, char* key_buffer, char* arg_buffer) {
+    auto type = static_cast<request_type>(std::stoi(type_buffer));
+    auto key = std::stoi(key_buffer);
+    auto arg = std::string(arg_buffer);
+
+    return Request(type, key, arg);
+}
+
+std::vector<Request> import_cs_requests(const std::string& file_path)
+{
+    std::ifstream infile(file_path);
+
+    std::vector<Request> requests;
+    std::string line;
+    char type_buffer[2];
+    char key_buffer[11];
+    char arg_buffer[129];
+    auto* reading_buffer = type_buffer;
+    auto buffer_index = 0;
+    while (std::getline(infile, line)) {
+        for (auto& character: line) {
+            if (character == ',') {
+                reading_buffer[buffer_index] = '\0';
+                if (reading_buffer == type_buffer) {
+                    reading_buffer = key_buffer;
+                } else if (reading_buffer == key_buffer) {
+                    reading_buffer = arg_buffer;
+                } else {
+                    reading_buffer = type_buffer;
+                    requests.emplace_back(make_request(
+                        type_buffer,
+                        key_buffer,
+                        arg_buffer
+                    ));
+                }
+                buffer_index = 0;
+            } else {
+                reading_buffer[buffer_index] = character;
+                buffer_index++;
+            }
+        }
+    }
+
+    return requests;
+}
+
 std::vector<Request> import_requests(const std::string& file_path,
     const std::string& field)
     {
