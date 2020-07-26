@@ -60,7 +60,6 @@ using toml_config = toml::basic_value<
 
 static int verbose = 0;
 static int SLEEP = 1;
-static int N_PARTITIONS = 4;
 static bool RUNNING = true;
 const int VALUE_SIZE = 128;
 
@@ -88,6 +87,9 @@ initialize_scheduler(
 	int n_requests,
 	const toml_config& config)
 {
+	auto n_partitions = toml::find<int>(
+		config, "n_partitions"
+	);
 	auto repartition_method_s = toml::find<std::string>(
 		config, "repartition_method"
 	);
@@ -98,7 +100,7 @@ initialize_scheduler(
 		config, "repartition_interval"
 	);
 	auto* scheduler = new kvpaxos::Scheduler<int>(
-		n_requests, repartition_interval, N_PARTITIONS,
+		n_requests, repartition_interval, n_partitions,
 		repartition_method
 	);
 
