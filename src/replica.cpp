@@ -56,7 +56,6 @@ using toml_config = toml::basic_value<
 
 static int verbose = 0;
 static int SLEEP = 1;
-static int N_PARTITIONS = 4;
 static bool RUNNING;
 
 struct replica_args {
@@ -120,6 +119,9 @@ initialize_evpaxos_replica(int id, const toml_config& config)
 static kvpaxos::Scheduler<int>*
 initialize_scheduler(const toml_config& config)
 {
+	auto n_partitions = toml::find<int>(
+		config, "n_partitions"
+	);
 	auto repartition_method_s = toml::find<std::string>(
 		config, "repartition_method"
 	);
@@ -130,7 +132,7 @@ initialize_scheduler(const toml_config& config)
 		config, "repartition_interval"
 	);
 	auto* scheduler = new kvpaxos::Scheduler<int>(
-		repartition_interval, N_PARTITIONS, repartition_method
+		repartition_interval, n_partitions, repartition_method
 	);
 
 	auto initial_requests = toml::find<std::string>(
