@@ -199,7 +199,7 @@ order_execution_timestamps(kvpaxos::Scheduler<int>& scheduler)
 }
 
 static void
-run(unsigned short port, const toml_config& config)
+run(const toml_config& config)
 {
 	auto requests_path = toml::find<std::string>(
 		config, "requests_path"
@@ -250,7 +250,7 @@ main(int argc, char const *argv[])
 
 	const auto config = toml::parse(argv[1]);
 
-	run(port, config);
+	run(config);
 
 	return 0;
 }
