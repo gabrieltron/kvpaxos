@@ -237,19 +237,18 @@ run(unsigned short port, const toml_config& config)
 static void
 usage(std::string prog)
 {
-	std::cout << "Usage: " << prog << " id config\n";
+	std::cout << "Usage: " << prog << " config\n";
 }
 
 int
 main(int argc, char const *argv[])
 {
-	if (argc < 3) {
+	if (argc < 2) {
 		usage(std::string(argv[0]));
 		exit(1);
 	}
 
-	auto port = atoi(argv[1]);
-	const auto config = toml::parse(argv[2]);
+	const auto config = toml::parse(argv[1]);
 
 	run(port, config);
 
