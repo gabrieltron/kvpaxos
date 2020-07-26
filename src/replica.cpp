@@ -66,15 +66,20 @@ const int VALUE_SIZE = 128;
 
 
 void
-print_throughput(int sleep_duration, kvpaxos::Scheduler<int>* scheduler)
+print_throughput(int sleep_duration, int n_requests, kvpaxos::Scheduler<int>* scheduler)
 {
 	auto already_counted = 0;
 	while (RUNNING) {
 		std::this_thread::sleep_for(std::chrono::seconds(sleep_duration));
-		auto throughput = scheduler->n_executed_requests() - already_counted;
+		auto executed_requests = scheduler->n_executed_requests();
+		auto throughput = executed_requests - already_counted;
 		std::cout << std::chrono::system_clock::now().time_since_epoch().count() << ",";
 		std::cout << throughput << "\n";
 		already_counted += throughput;
+
+		if (executed_requests == n_requests) {
+			break;
+		}
 	}
 }
 
@@ -203,7 +208,7 @@ run(unsigned short port, const toml_config& config)
 	auto* scheduler = initialize_scheduler(requests.size(), config);
 
 	auto throughput_thread = std::thread(
-		print_throughput, SLEEP, scheduler
+		print_throughput, SLEEP, requests.size(), scheduler
 	);
 
 	auto print_percentage = toml::find<int>(
@@ -214,6 +219,9 @@ run(unsigned short port, const toml_config& config)
 	auto send_timestamps = execute_requests(
 		*scheduler, client_messages, print_percentage
 	);
+
+	throughput_thread.join();
+
 	auto execution_timestamps = order_execution_timestamps(*scheduler);
 
 	for (auto& kv: execution_timestamps) {

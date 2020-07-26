@@ -69,7 +69,12 @@ public:
     }
 
     int n_executed_requests() {
-        return Partition<T>::n_executed_requests();
+        auto n_executed_requests = 0;
+        for (auto& kv: partitions_) {
+            auto* partition = kv.second;
+            n_executed_requests += partition->n_executed_requests();
+        }
+        return n_executed_requests;
     }
 
     void schedule_and_answer(struct client_message& request) {
