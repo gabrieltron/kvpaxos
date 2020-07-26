@@ -33,10 +33,8 @@ namespace kvpaxos {
 template <typename T>
 class Partition {
 public:
-    Partition(int id, int n_requests, pthread_barrier_t* end_barrier)
+    Partition(int id)
         : id_{id},
-          n_requests_{n_requests},
-          end_barrier_{end_barrier},
           executing_{true}
     {
         socket_fd_ = socket(AF_INET, SOCK_DGRAM, 0);
@@ -66,7 +64,7 @@ public:
         worker_thread_ = std::thread(&Partition<T>::thread_loop, this);
     }
 
-    void push_request(struct client_message request) {
+    void push_request(struct client_message& request) {
         queue_mutex_.lock();
             requests_queue_.push(std::move(request));
         queue_mutex_.unlock();
@@ -258,20 +256,16 @@ private:
                 n_executed_requests_++;
             }
 
-            if (n_executed_requests_ == n_requests_) {
-                pthread_barrier_wait(end_barrier_);
-            }
         }
     }
 
-    int id_, n_requests_, socket_fd_;
+    int id_, socket_fd_;
     static kvstorage::Storage storage_;
     static model::Graph<T> workload_graph_;
     static int n_executed_requests_;
     static std::mutex executed_requests_mutex_;
 
     bool executing_;
-    pthread_barrier_t* end_barrier_;
     std::thread worker_thread_;
     sem_t semaphore_;
     std::queue<struct client_message> requests_queue_;

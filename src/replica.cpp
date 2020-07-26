@@ -81,7 +81,6 @@ print_throughput(int sleep_duration, kvpaxos::Scheduler<int>* scheduler)
 static kvpaxos::Scheduler<int>*
 initialize_scheduler(
 	int n_requests,
-	pthread_barrier_t* end_barrier,
 	const toml_config& config)
 {
 	auto repartition_method_s = toml::find<std::string>(
@@ -95,7 +94,7 @@ initialize_scheduler(
 	);
 	auto* scheduler = new kvpaxos::Scheduler<int>(
 		n_requests, repartition_interval, N_PARTITIONS,
-		repartition_method, end_barrier
+		repartition_method
 	);
 
 	auto initial_requests = toml::find<std::string>(
@@ -149,8 +148,7 @@ static std::unordered_map<int, time_point>
 execute_requests(
 	kvpaxos::Scheduler<int>& scheduler,
 	std::vector<struct client_message>& requests,
-	int print_percentage,
-	pthread_barrier_t* end_barrier)
+	int print_percentage)
 {
 	srand (time(NULL));
 	std::unordered_map<int, time_point> end_timestamp;
@@ -164,7 +162,6 @@ execute_requests(
 		}
 		scheduler.schedule_and_answer(request);
 	}
-	pthread_barrier_wait(end_barrier);
 	return end_timestamp;
 }
 
@@ -203,9 +200,7 @@ run(unsigned short port, const toml_config& config)
 		config, "requests_path"
 	);
 	auto requests = std::move(workload::import_cs_requests(requests_path));
-	auto* end_barrier = new pthread_barrier_t();
-	pthread_barrier_init(end_barrier, NULL, 2);
-	auto* scheduler = initialize_scheduler(requests.size(), end_barrier, config);
+	auto* scheduler = initialize_scheduler(requests.size(), config);
 
 	auto throughput_thread = std::thread(
 		print_throughput, SLEEP, scheduler
@@ -217,7 +212,7 @@ run(unsigned short port, const toml_config& config)
 	auto client_messages = to_client_messages(requests);
 
 	auto send_timestamps = execute_requests(
-		*scheduler, client_messages, print_percentage, end_barrier
+		*scheduler, client_messages, print_percentage
 	);
 	auto execution_timestamps = order_execution_timestamps(*scheduler);
 

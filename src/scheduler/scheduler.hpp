@@ -32,14 +32,13 @@ public:
     Scheduler(int n_requests,
                 int repartition_interval,
                 int n_partitions,
-                model::CutMethod repartition_method,
-                pthread_barrier_t* end_barrier
+                model::CutMethod repartition_method
     ) : n_partitions_{n_partitions},
         repartition_interval_{repartition_interval},
         repartition_method_{repartition_method}
     {
         for (auto i = 0; i < n_partitions_; i++) {
-            auto* partition = new Partition<T>(i, n_requests, end_barrier);
+            auto* partition = new Partition<T>(i);
             partitions_.emplace(i, partition);
         }
         data_to_partition_ = new std::unordered_map<T, Partition<T>*>();
