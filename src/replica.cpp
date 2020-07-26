@@ -140,7 +140,7 @@ execute_request(
 }
 
 void
-print_throughput(int sleep_duration, int& n_executed_requests)
+print_throughput(int sleep_duration, int n_requests, int& n_executed_requests)
 {
 	auto already_counted = 0;
 	while (RUNNING) {
@@ -150,6 +150,10 @@ print_throughput(int sleep_duration, int& n_executed_requests)
 		std::cout << throughput << "\n";
 
 		already_counted += throughput;
+
+		if (n_executed_requests == n_requests) {
+			break;
+		}
 	}
 }
 
@@ -158,7 +162,7 @@ initialize_storage(const toml_config& config)
 {
 	auto storage = kvstorage::Storage();
 	auto initial_requests = toml::find<std::string>(
-		config, "requests_path"
+		config, "load_requests_path"
 	);
 	if (not initial_requests.empty()) {
 		auto populate_requests = std::move(
@@ -209,7 +213,7 @@ to_client_messages(
 	return client_messages;
 }
 
-static std::vector<time_point>
+static std::vector<std::chrono::nanoseconds>
 execute_requests(
 	kvstorage::Storage& storage,
 	std::vector<struct client_message>& requests,
@@ -217,7 +221,7 @@ execute_requests(
 	int& n_executed_requests)
 {
 	srand (time(NULL));
-	std::vector<time_point> delays;
+	std::vector<std::chrono::nanoseconds> delays;
 
 	for (auto& request: requests) {
 		time_point send_timestamp;
@@ -241,34 +245,33 @@ execute_requests(
 }
 
 static void
-run(unsigned short port, const toml_config& config)
+run(const toml_config& config)
 {
 	auto requests_path = toml::find<std::string>(
 		config, "requests_path"
 	);
-	auto requests = std::move(workload::import_requests(requests_path, "requests"));
+	auto requests = std::move(workload::import_cs_requests(requests_path));
 	auto storage = initialize_storage(config);
 
 	auto n_executed_requests = 0;
 	auto throughput_thread = std::thread(
-		print_throughput, SLEEP, std::ref(n_executed_requests)
+		print_throughput, SLEEP, requests.size(), std::ref(n_executed_requests)
 	);
 
 	auto print_percentage = toml::find<int>(
 		config, "print_percentage"
 	);
-	auto client_messages = to_client_messages(requests);
+	auto client_messages = std::move(to_client_messages(requests));
 
-	auto delays = execute_requests(
+	auto delays = std::move(execute_requests(
 		storage, client_messages, print_percentage, n_executed_requests
-	);
+	));
 
-	RUNNING = false;
-	std::this_thread::sleep_for(std::chrono::seconds(1));
+	throughput_thread.join();
 
 	for (auto i = 0; i < delays.size(); i++) {
 		auto& delay = delays[i];
-		std::cout << i << "," << delay.time_since_epoch().count() << "\n";
+		std::cout << i << "," << delay.count() << "\n";
 	}
 	std::cout << std::endl;
 }
@@ -276,21 +279,20 @@ run(unsigned short port, const toml_config& config)
 static void
 usage(std::string prog)
 {
-	std::cout << "Usage: " << prog << " id config\n";
+	std::cout << "Usage: " << prog << " config\n";
 }
 
 int
 main(int argc, char const *argv[])
 {
-	if (argc < 3) {
+	if (argc < 2) {
 		usage(std::string(argv[0]));
 		exit(1);
 	}
 
-	auto port = atoi(argv[1]);
-	const auto config = toml::parse(argv[2]);
+	const auto config = toml::parse(argv[1]);
 
-	run(port, config);
+	run(config);
 
 	return 0;
 }
