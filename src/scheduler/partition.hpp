@@ -101,7 +101,7 @@ public:
         return data_set_;
     }
 
-    const std::vector<std::pair<int, time_point>>& execution_timestamps() const {
+    const std::unordered_map<int, time_point>& execution_timestamps() const {
         return execution_timestamps_;
     }
 
@@ -249,7 +249,7 @@ private:
 
             if (request.record_timestamp) {
                 auto timestamp = std::chrono::system_clock::now();
-                execution_timestamps_.emplace_back(request.id, timestamp);
+                execution_timestamps_.emplace(request.id, timestamp);
             }
 
             n_executed_requests_++;
@@ -267,7 +267,7 @@ private:
     std::queue<struct client_message> requests_queue_;
     std::mutex queue_mutex_;
     static std::shared_mutex execution_mutex_;
-    std::vector<std::pair<int, time_point>> execution_timestamps_;
+    std::unordered_map<int, time_point> execution_timestamps_;
 
     int total_weight_ = 0;
     std::unordered_set<T> data_set_;

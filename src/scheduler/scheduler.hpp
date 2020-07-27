@@ -118,9 +118,9 @@ public:
         }
     }
 
-    std::vector<std::vector<std::pair<int, time_point>>>
+    std::vector<std::unordered_map<int, time_point>>
     execution_timestamps() const {
-        std::vector<std::vector<std::pair<int, time_point>>> timestamps;
+        std::vector<std::unordered_map<int, time_point>> timestamps;
         for (auto& kv: partitions_) {
             auto& partition = kv.second;
             timestamps.emplace_back(partition->execution_timestamps());

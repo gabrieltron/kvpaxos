@@ -31,6 +31,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <future>
 #include <iostream>
 #include <iterator>
 #include <stdlib.h>
@@ -45,6 +46,7 @@
 #include <tbb/concurrent_vector.h>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "evclient/evclient.h"
@@ -64,22 +66,33 @@ static bool RUNNING = true;
 const int VALUE_SIZE = 128;
 
 
-void
-print_throughput(int sleep_duration, int n_requests, kvpaxos::Scheduler<int>* scheduler)
+std::vector<int>
+metrics_loop(int sleep_duration, int n_requests, kvpaxos::Scheduler<int>* scheduler)
 {
-	auto already_counted = 0;
+	auto already_counted_throughput = 0;
+	auto already_counted_latency = 0;
+	std::vector<int> latency_steps;
 	while (RUNNING) {
 		std::this_thread::sleep_for(std::chrono::seconds(sleep_duration));
 		auto executed_requests = scheduler->n_executed_requests();
-		auto throughput = executed_requests - already_counted;
+		auto throughput = executed_requests - already_counted_throughput;
 		std::cout << std::chrono::system_clock::now().time_since_epoch().count() << ",";
 		std::cout << throughput << "\n";
-		already_counted += throughput;
+		already_counted_throughput += throughput;
 
+		auto latencies = std::move(scheduler->execution_timestamps());
+		auto n_latencies = 0;
+		for (auto kv: latencies) {
+			n_latencies += kv.size();
+		}
+		latency_steps.emplace_back(n_latencies-already_counted_latency);
+		already_counted_latency += n_latencies;
 		if (executed_requests == n_requests) {
 			break;
 		}
 	}
+
+	return latency_steps;
 }
 
 static kvpaxos::Scheduler<int>*
@@ -151,7 +164,7 @@ to_client_messages(
 	return client_messages;
 }
 
-static std::unordered_map<int, time_point>
+static std::pair<std::unordered_map<int, time_point>, std::vector<int>>
 execute_requests(
 	kvpaxos::Scheduler<int>& scheduler,
 	std::vector<struct client_message>& requests,
@@ -159,6 +172,7 @@ execute_requests(
 {
 	srand (time(NULL));
 	std::unordered_map<int, time_point> end_timestamp;
+	std::vector<int> send_order;
 
 	for (auto& request: requests) {
 		if (print_percentage >= rand() % 100 + 1) {
@@ -166,38 +180,21 @@ execute_requests(
     		auto kv = std::make_pair(request.id, timestamp);
     		end_timestamp.insert(kv);
 			request.record_timestamp = true;
+
+			send_order.emplace_back(request.id);
 		}
 		scheduler.schedule_and_answer(request);
 	}
-	return end_timestamp;
+	return std::make_pair(end_timestamp, send_order);
 }
 
-bool sort_pair(const std::pair<int,time_point> &a,
-              const std::pair<int,time_point> &b)
-{
-    return (a.second.time_since_epoch().count() < b.second.time_since_epoch().count());
-}
-
-static std::vector<std::pair<int, time_point>>
-order_execution_timestamps(kvpaxos::Scheduler<int>& scheduler)
-{
-	std::vector<std::pair<int, time_point>> ordered_timestamps;
-	auto timestamp_vectors = scheduler.execution_timestamps();
-	for (auto& timestamp_vector: timestamp_vectors) {
-		ordered_timestamps.insert(
-			ordered_timestamps.end(),
-			std::make_move_iterator(timestamp_vector.begin()),
-			std::make_move_iterator(timestamp_vector.end())
-		);
+std::unordered_map<int, time_point>
+join_maps(std::vector<std::unordered_map<int, time_point>> maps) {
+	std::unordered_map<int, time_point> joined_map;
+	for (auto& map: maps) {
+		joined_map.insert(map.begin(), map.end());
 	}
-
-	std::sort(
-		ordered_timestamps.begin(),
-		ordered_timestamps.end(),
-		sort_pair
-	);
-
-	return ordered_timestamps;
+	return joined_map;
 }
 
 static void
@@ -209,8 +206,8 @@ run(const toml_config& config)
 	auto requests = std::move(workload::import_cs_requests(requests_path));
 	auto* scheduler = initialize_scheduler(requests.size(), config);
 
-	auto throughput_thread = std::thread(
-		print_throughput, SLEEP, requests.size(), scheduler
+	auto p_latency_steps = std::async(
+		metrics_loop, SLEEP, requests.size(), scheduler
 	);
 
 	auto print_percentage = toml::find<int>(
@@ -218,20 +215,32 @@ run(const toml_config& config)
 	);
 	auto client_messages = to_client_messages(requests);
 
-	auto send_timestamps = execute_requests(
+	auto send_metrics = execute_requests(
 		*scheduler, client_messages, print_percentage
 	);
+	auto& send_timestamps = send_metrics.first;
+	auto& latencies_order = send_metrics.second;
 
-	throughput_thread.join();
+	auto latency_steps = p_latency_steps.get();
 
-	auto execution_timestamps = order_execution_timestamps(*scheduler);
+	auto execution_timestamps = join_maps(scheduler->execution_timestamps());
 
-	for (auto& kv: execution_timestamps) {
-		auto id = kv.first;
-		auto execution_timestamp = kv.second;
+	auto printed_latencies = 0;
+	for (auto seconds = 0; seconds < latency_steps.size(); seconds++) {
+		auto n_latencies = latency_steps[seconds];
+		if (n_latencies == 0) {
+			continue;
+		}
 
-		auto delay = execution_timestamp - send_timestamps[id];
-		std::cout << id << "," << delay.count() << "\n";
+		for (auto i = 0; i < n_latencies; i++) {
+			auto requests_id = latencies_order[printed_latencies+i];
+			auto send = send_timestamps[requests_id];
+			auto executed = execution_timestamps[requests_id];
+			auto delay = executed - send;
+			std::cout << seconds << ",";
+			std::cout << delay.count() << "\n";
+		}
+		printed_latencies += n_latencies;
 	}
 	std::cout << std::endl;
 }
