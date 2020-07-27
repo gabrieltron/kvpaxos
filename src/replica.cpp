@@ -71,14 +71,16 @@ metrics_loop(int sleep_duration, int n_requests, kvpaxos::Scheduler<int>* schedu
 {
 	auto already_counted_throughput = 0;
 	auto already_counted_latency = 0;
+	auto counter = 0;
 	std::vector<int> latency_steps;
 	while (RUNNING) {
 		std::this_thread::sleep_for(std::chrono::seconds(sleep_duration));
 		auto executed_requests = scheduler->n_executed_requests();
 		auto throughput = executed_requests - already_counted_throughput;
-		std::cout << std::chrono::system_clock::now().time_since_epoch().count() << ",";
+		std::cout << counter << ",";
 		std::cout << throughput << "\n";
 		already_counted_throughput += throughput;
+		counter++;
 
 		auto latencies = std::move(scheduler->execution_timestamps());
 		auto n_latencies = 0;
@@ -86,7 +88,7 @@ metrics_loop(int sleep_duration, int n_requests, kvpaxos::Scheduler<int>* schedu
 			n_latencies += kv.size();
 		}
 		latency_steps.emplace_back(n_latencies-already_counted_latency);
-		already_counted_latency += n_latencies;
+		already_counted_latency = n_latencies;
 		if (executed_requests == n_requests) {
 			break;
 		}
