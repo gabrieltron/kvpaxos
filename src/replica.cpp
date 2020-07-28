@@ -213,9 +213,11 @@ run(const toml_config& config)
 	);
 	auto client_messages = to_client_messages(requests);
 
+	auto start_execution_timestamp = std::chrono::system_clock::now();
 	auto send_metrics = execute_requests(
 		*scheduler, client_messages, print_percentage
 	);
+	auto end_execution_timestamp = std::chrono::system_clock::now();
 	auto& send_timestamps = send_metrics.first;
 	auto& latencies_order = send_metrics.second;
 
@@ -240,6 +242,9 @@ run(const toml_config& config)
 		}
 		printed_latencies += n_latencies;
 	}
+
+	auto makespan = end_execution_timestamp - start_execution_timestamp;
+	std::cout << "Makespan: " << makespan.count() << "\n";
 	std::cout << std::endl;
 }
 
