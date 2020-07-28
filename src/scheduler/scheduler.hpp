@@ -193,7 +193,7 @@ private:
     void update_graph(const client_message& message) {
         std::vector<int> data{message.key};
         if (message.type == SCAN) {
-            for (auto i = 1; std::stoi(message.args); i++) {
+            for (auto i = 1; i < std::stoi(message.args); i++) {
                 data.emplace_back(message.key+i);
             }
         }
