@@ -4,7 +4,6 @@
 
 #include <arpa/inet.h>
 #include <chrono>
-#include <evpaxos.h>
 #include <pthread.h>
 #include <queue>
 #include <iterator>
@@ -109,6 +108,7 @@ public:
     }
 
 private:
+    /*
     void on_event(struct bufferevent* bev, short ev, void *arg)
     {
         if (ev & BEV_EVENT_EOF || ev & BEV_EVENT_ERROR) {
@@ -137,6 +137,7 @@ private:
             printf("Failed to send answer\n");
         }
     }
+    */
 
     void thread_loop() {
         while (executing_) {

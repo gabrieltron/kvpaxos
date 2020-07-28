@@ -12,5 +12,4 @@ target_link_libraries(
     types
         PUBLIC
             CONAN_PKG::tbb
-            evpaxos
 )

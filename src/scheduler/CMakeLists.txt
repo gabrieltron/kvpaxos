@@ -19,7 +19,6 @@ target_include_directories(
 target_link_libraries(
     scheduler
         PUBLIC
-            evpaxos
             graph
             storage
             request

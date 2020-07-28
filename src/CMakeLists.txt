@@ -1,5 +1,5 @@
 add_subdirectory(request)
-add_subdirectory(evclient)
+#add_subdirectory(evclient)
 add_subdirectory(types)
 add_subdirectory(storage)
 add_subdirectory(scheduler)
@@ -18,8 +18,6 @@ target_link_libraries(
         PRIVATE
             CONAN_PKG::toml11
             request
-            evclient
-            evpaxos
             types
             scheduler
 )

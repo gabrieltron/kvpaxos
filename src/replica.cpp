@@ -26,9 +26,6 @@
  */
 
 
-#include <evpaxos.h>
-#include <evpaxos/paxos.h>
-
 #include <algorithm>
 #include <chrono>
 #include <future>
@@ -49,7 +46,6 @@
 #include <utility>
 #include <vector>
 
-#include "evclient/evclient.h"
 #include "request/request_generation.h"
 #include "types/types.h"
 #include "scheduler/scheduler.hpp"
