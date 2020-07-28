@@ -15,6 +15,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "graph/graph.hpp"
 #include "graph/partitioning.h"
 #include "partition.hpp"
 #include "request/request.hpp"
@@ -39,10 +40,6 @@ public:
             partitions_.emplace(i, i);
         }
         data_to_partition_ = new std::unordered_map<T, Partition<T>*>();
-
-        pthread_barrier_init(&start_repartition_barrier_, NULL, 2);
-        pthread_barrier_init(&finish_repartition_barrier_, NULL, 2);
-        repartition_thread_ = std::thread(&Scheduler<T>::repartition_data_, this);
     }
 
     ~Scheduler() {
@@ -92,17 +89,15 @@ public:
         } else {
             arbitrary_partition->push_request(request);
         }
+        update_graph(request);
 
         n_dispatched_requests_++;
         if (repartition_interval_ > 0) {
             if (
                 n_dispatched_requests_ % repartition_interval_ == 0
             ) {
-                auto& execution_mutex = Partition<T>::execution_mutex();
-                std::unique_lock lock(execution_mutex);
-
-                pthread_barrier_wait(&start_repartition_barrier_);
-                pthread_barrier_wait(&finish_repartition_barrier_);
+                sync_all_partitions();
+                repartition_data();
             }
         }
     }
@@ -167,35 +162,56 @@ private:
         data_to_partition_->emplace(key, &partitions_.at(partition_id));
 
         round_robin_counter_ = (round_robin_counter_+1) % n_partitions_;
+        workload_graph_.add_vertice(key);
     }
 
     bool mapped(T key) const {
         return data_to_partition_->find(key) != data_to_partition_->end();
     }
 
-    void repartition_data_() {
-        while (true) {
-            pthread_barrier_wait(&start_repartition_barrier_);
+    void update_graph(const client_message& message) {
+        std::vector<int> data{message.key};
+        if (message.type == SCAN) {
+            for (auto i = 1; std::stoi(message.args); i++) {
+                data.emplace_back(message.key+i);
+            }
+        }
 
-            auto& workload_graph = Partition<T>::workload_graph();
-            auto partition_scheme = std::move(
-                model::cut_graph(workload_graph, partitions_.size(), repartition_method_)
-            );
-
-            delete data_to_partition_;
-            data_to_partition_ = new std::unordered_map<T, Partition<T>*>();
-            auto sorted_vertex = std::move(workload_graph.sorted_vertex());
-            for (auto i = 0; i < partition_scheme.size(); i++) {
-                auto partition = partition_scheme[i];
-                if (partition >= n_partitions_) {
-                    printf("ERROR: partition was %d!\n", partition);
-                    fflush(stdout);
-                }
-                auto data = sorted_vertex[i];
-                data_to_partition_->emplace(data, &partitions_.at(partition));
+        for (auto i = 0; i < data.size(); i++) {
+            if (not workload_graph_.vertice_exists(data[i])) {
+                workload_graph_.add_vertice(data[i]);
             }
 
-            pthread_barrier_wait(&finish_repartition_barrier_);
+            workload_graph_.increase_vertice_weight(data[i]);
+            for (auto j = i+1; j < data.size(); j++) {
+                if (not workload_graph_.vertice_exists(data[j])) {
+                    workload_graph_.add_vertice(data[j]);
+                }
+                if (not workload_graph_.are_connected(data[i], data[j])) {
+                    workload_graph_.add_edge(data[i], data[j]);
+                }
+
+                workload_graph_.increase_edge_weight(data[i], data[j]);
+            }
+        }
+    }
+
+    void repartition_data() {
+        auto partition_scheme = std::move(
+            model::cut_graph(workload_graph_, partitions_.size(), repartition_method_)
+        );
+
+        delete data_to_partition_;
+        data_to_partition_ = new std::unordered_map<T, Partition<T>*>();
+        auto sorted_vertex = std::move(workload_graph_.sorted_vertex());
+        for (auto i = 0; i < partition_scheme.size(); i++) {
+            auto partition = partition_scheme[i];
+            if (partition >= n_partitions_) {
+                printf("ERROR: partition was %d!\n", partition);
+                fflush(stdout);
+            }
+            auto data = sorted_vertex[i];
+            data_to_partition_->emplace(data, &partitions_.at(partition));
         }
     }
 
@@ -207,10 +223,10 @@ private:
     std::unordered_map<int, Partition<T>> partitions_;
     std::unordered_map<T, Partition<T>*>* data_to_partition_;
 
+    model::Graph<T> workload_graph_;
     model::CutMethod repartition_method_;
     int repartition_interval_;
     std::thread repartition_thread_;
-    pthread_barrier_t start_repartition_barrier_, finish_repartition_barrier_;
 };
 
 };
