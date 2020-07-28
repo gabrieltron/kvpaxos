@@ -56,7 +56,6 @@ public:
             }
 
             storage_.write(request.key(), request.args());
-            workload_graph_.add_vertice(request.key());
         }
     }
 
@@ -105,16 +104,8 @@ public:
         return execution_timestamps_;
     }
 
-    static const model::Graph<T>& workload_graph() {
-        return workload_graph_;
-    }
-
     int n_executed_requests() const {
         return n_executed_requests_;
-    }
-
-    static std::shared_mutex& execution_mutex() {
-        return execution_mutex_;
     }
 
 private:
@@ -147,33 +138,12 @@ private:
         }
     }
 
-    void update_graph(const std::vector<T>& data) {
-        for (auto i = 0; i < data.size(); i++) {
-            if (not workload_graph_.vertice_exists(data[i])) {
-                workload_graph_.add_vertice(data[i]);
-            }
-
-            workload_graph_.increase_vertice_weight(data[i]);
-            for (auto j = i+1; j < data.size(); j++) {
-                if (not workload_graph_.vertice_exists(data[j])) {
-                    workload_graph_.add_vertice(data[j]);
-                }
-                if (not workload_graph_.are_connected(data[i], data[j])) {
-                    workload_graph_.add_edge(data[i], data[j]);
-                }
-
-                workload_graph_.increase_edge_weight(data[i], data[j]);
-            }
-        }
-    }
-
     void thread_loop() {
         while (executing_) {
             sem_wait(&semaphore_);
             if (not executing_) {
                 return;
             }
-            std::shared_lock lock(execution_mutex_);
 
             queue_mutex_.lock();
                 auto request = std::move(requests_queue_.front());
@@ -190,7 +160,6 @@ private:
             case READ:
             {
                 answer = std::move(storage_.read(key));
-                update_graph(std::vector<T>{key});
                 break;
             }
 
@@ -198,7 +167,6 @@ private:
             {
                 storage_.write(key, request_args);
                 answer = request_args;
-                update_graph(std::vector<T>{key});
                 break;
             }
 
@@ -214,7 +182,6 @@ private:
 
                 std::vector<T> keys(length);
                 std::iota(keys.begin(), keys.end(), 1);
-                update_graph(keys);
                 break;
             }
 
@@ -258,15 +225,12 @@ private:
 
     int id_, socket_fd_, n_executed_requests_;
     static kvstorage::Storage storage_;
-    static model::Graph<T> workload_graph_;
-    static std::mutex executed_requests_mutex_;
 
     bool executing_;
     std::thread worker_thread_;
     sem_t semaphore_;
     std::queue<struct client_message> requests_queue_;
     std::mutex queue_mutex_;
-    static std::shared_mutex execution_mutex_;
     std::unordered_map<int, time_point> execution_timestamps_;
 
     int total_weight_ = 0;
@@ -276,12 +240,6 @@ private:
 
 template<typename T>
 kvstorage::Storage Partition<T>::storage_;
-template<typename T>
-model::Graph<T> Partition<T>::workload_graph_;
-template<typename T>
-std::mutex Partition<T>::executed_requests_mutex_;
-template<typename T>
-std::shared_mutex Partition<T>::execution_mutex_;
 
 }
 
