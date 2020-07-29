@@ -99,10 +99,6 @@ public:
         return data_set_;
     }
 
-    const std::unordered_map<int, time_point>& execution_timestamps() const {
-        return execution_timestamps_;
-    }
-
     int n_executed_requests() const {
         return n_executed_requests_;
     }
@@ -215,11 +211,6 @@ private:
 
             //answer_client((char *)&reply, sizeof(reply_message), request);
 
-            if (request.record_timestamp) {
-                auto timestamp = std::chrono::system_clock::now();
-                execution_timestamps_.emplace(request.id, timestamp);
-            }
-
             n_executed_requests_++;
         }
     }
@@ -232,7 +223,6 @@ private:
     sem_t semaphore_;
     std::queue<struct client_message> requests_queue_;
     std::mutex queue_mutex_;
-    std::unordered_map<int, time_point> execution_timestamps_;
 
     int total_weight_ = 0;
     std::unordered_set<T> data_set_;

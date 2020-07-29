@@ -113,16 +113,6 @@ public:
         }
     }
 
-    std::vector<std::unordered_map<int, time_point>>
-    execution_timestamps() const {
-        std::vector<std::unordered_map<int, time_point>> timestamps;
-        for (auto& kv: partitions_) {
-            auto& partition = kv.second;
-            timestamps.emplace_back(partition->execution_timestamps());
-        }
-        return timestamps;
-    }
-
 private:
     std::unordered_set<Partition<T>*> involved_partitions(
         const struct client_message& request)

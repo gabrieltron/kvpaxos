@@ -28,7 +28,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <future>
 #include <iostream>
 #include <iterator>
 #include <stdlib.h>
@@ -62,13 +61,11 @@ static bool RUNNING = true;
 const int VALUE_SIZE = 128;
 
 
-std::vector<int>
+void
 metrics_loop(int sleep_duration, int n_requests, kvpaxos::Scheduler<int>* scheduler)
 {
 	auto already_counted_throughput = 0;
-	auto already_counted_latency = 0;
 	auto counter = 0;
-	std::vector<int> latency_steps;
 	while (RUNNING) {
 		std::this_thread::sleep_for(std::chrono::seconds(sleep_duration));
 		auto executed_requests = scheduler->n_executed_requests();
@@ -78,19 +75,10 @@ metrics_loop(int sleep_duration, int n_requests, kvpaxos::Scheduler<int>* schedu
 		already_counted_throughput += throughput;
 		counter++;
 
-		auto latencies = std::move(scheduler->execution_timestamps());
-		auto n_latencies = 0;
-		for (auto kv: latencies) {
-			n_latencies += kv.size();
-		}
-		latency_steps.emplace_back(n_latencies-already_counted_latency);
-		already_counted_latency = n_latencies;
 		if (executed_requests == n_requests) {
 			break;
 		}
 	}
-
-	return latency_steps;
 }
 
 static kvpaxos::Scheduler<int>*
@@ -115,15 +103,16 @@ initialize_scheduler(
 		repartition_method
 	);
 
-	auto initial_requests = toml::find<std::string>(
-		config, "load_requests_path"
+	auto n_initial_keys = toml::find<int>(
+		config, "n_initial_keys"
 	);
-	if (not initial_requests.empty()) {
-		auto populate_requests = std::move(
-			workload::import_requests(initial_requests, "load_requests")
-		);
-		scheduler->process_populate_requests(populate_requests);
+	std::string data(VALUE_SIZE, '*');
+	std::vector<workload::Request> populate_requests;
+	for (auto i = 0; i <= n_initial_keys; i++) {
+		populate_requests.emplace_back(WRITE, i, data);
 	}
+
+	scheduler->process_populate_requests(populate_requests);
 
 	scheduler->run();
 	return scheduler;
@@ -162,28 +151,15 @@ to_client_messages(
 	return client_messages;
 }
 
-static std::pair<std::unordered_map<int, time_point>, std::vector<int>>
+void
 execute_requests(
 	kvpaxos::Scheduler<int>& scheduler,
 	std::vector<struct client_message>& requests,
 	int print_percentage)
 {
-	srand (time(NULL));
-	std::unordered_map<int, time_point> end_timestamp;
-	std::vector<int> send_order;
-
 	for (auto& request: requests) {
-		if (print_percentage >= rand() % 100 + 1) {
-	    	auto timestamp = std::chrono::system_clock::now();
-    		auto kv = std::make_pair(request.id, timestamp);
-    		end_timestamp.insert(kv);
-			request.record_timestamp = true;
-
-			send_order.emplace_back(request.id);
-		}
 		scheduler.schedule_and_answer(request);
 	}
-	return std::make_pair(end_timestamp, send_order);
 }
 
 std::unordered_map<int, time_point>
@@ -204,7 +180,7 @@ run(const toml_config& config)
 	auto requests = std::move(workload::import_cs_requests(requests_path));
 	auto* scheduler = initialize_scheduler(requests.size(), config);
 
-	auto p_latency_steps = std::async(
+	auto throughput_thread = std::thread(
 		metrics_loop, SLEEP, requests.size(), scheduler
 	);
 
@@ -214,34 +190,10 @@ run(const toml_config& config)
 	auto client_messages = to_client_messages(requests);
 
 	auto start_execution_timestamp = std::chrono::system_clock::now();
-	auto send_metrics = execute_requests(
-		*scheduler, client_messages, print_percentage
-	);
+	execute_requests(*scheduler, client_messages, print_percentage);
 	auto end_execution_timestamp = std::chrono::system_clock::now();
-	auto& send_timestamps = send_metrics.first;
-	auto& latencies_order = send_metrics.second;
 
-	auto latency_steps = p_latency_steps.get();
-
-	auto execution_timestamps = join_maps(scheduler->execution_timestamps());
-
-	auto printed_latencies = 0;
-	for (auto seconds = 0; seconds < latency_steps.size(); seconds++) {
-		auto n_latencies = latency_steps[seconds];
-		if (n_latencies == 0) {
-			continue;
-		}
-
-		for (auto i = 0; i < n_latencies; i++) {
-			auto requests_id = latencies_order[printed_latencies+i];
-			auto send = send_timestamps[requests_id];
-			auto executed = execution_timestamps[requests_id];
-			auto delay = executed - send;
-			std::cout << seconds << ",";
-			std::cout << delay.count() << "\n";
-		}
-		printed_latencies += n_latencies;
-	}
+	throughput_thread.join();
 
 	auto makespan = end_execution_timestamp - start_execution_timestamp;
 	std::cout << "Makespan: " << makespan.count() << "\n";
