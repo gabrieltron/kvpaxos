@@ -92,7 +92,7 @@ public:
         update_graph(request);
 
         n_dispatched_requests_++;
-        if (repartition_interval_ > 0) {
+        if (repartition_method_ != model::ROUND_ROBIN) {
             if (
                 n_dispatched_requests_ % repartition_interval_ == 0
             ) {
