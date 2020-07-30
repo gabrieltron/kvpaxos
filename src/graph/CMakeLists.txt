@@ -16,3 +16,9 @@ target_link_libraries(
             metis
             kahip
 )
+
+target_compile_options(
+    graph
+        PRIVATE
+            -O3
+)
