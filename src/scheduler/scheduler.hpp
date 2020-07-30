@@ -40,6 +40,10 @@ public:
             partitions_.emplace(i, i);
         }
         data_to_partition_ = new std::unordered_map<T, Partition<T>*>();
+
+        sem_init(&graph_requests_semaphore_, 0, 0);
+        pthread_barrier_init(&repartition_barrier_, NULL, 2);
+        graph_thread_ = std::thread(&Scheduler<T>::update_graph_loop, this);
     }
 
     ~Scheduler() {
@@ -89,14 +93,26 @@ public:
         } else {
             arbitrary_partition->push_request(request);
         }
-        update_graph(request);
+
+        graph_requests_mutex_.lock();
+            graph_requests_queue_.push(request);
+        graph_requests_mutex_.unlock();
+        sem_post(&graph_requests_semaphore_);
 
         n_dispatched_requests_++;
         if (repartition_method_ != model::ROUND_ROBIN) {
             if (
                 n_dispatched_requests_ % repartition_interval_ == 0
             ) {
-                sync_all_partitions();
+                struct client_message sync_message;
+                sync_message.type = SYNC;
+
+                graph_requests_mutex_.lock();
+                    graph_requests_queue_.push(request);
+                graph_requests_mutex_.unlock();
+                sem_post(&graph_requests_semaphore_);
+
+                pthread_barrier_wait(&repartition_barrier_);
                 repartition_data();
             }
         }
@@ -162,11 +178,35 @@ private:
         data_to_partition_->emplace(key, &partitions_.at(partition_id));
 
         round_robin_counter_ = (round_robin_counter_+1) % n_partitions_;
-        workload_graph_.add_vertice(key);
+
+        struct client_message write_message;
+        write_message.type = WRITE;
+        write_message.key = key;
+
+        graph_requests_mutex_.lock();
+            graph_requests_queue_.push(write_message);
+        graph_requests_mutex_.unlock();
+        sem_post(&graph_requests_semaphore_);
     }
 
     bool mapped(T key) const {
         return data_to_partition_->find(key) != data_to_partition_->end();
+    }
+
+    void update_graph_loop() {
+        while(true) {
+            sem_wait(&graph_requests_semaphore_);
+            graph_requests_mutex_.lock();
+                auto request = std::move(graph_requests_queue_.front());
+                graph_requests_queue_.pop();
+            graph_requests_mutex_.unlock();
+
+            if (request.type == SYNC) {
+                pthread_barrier_wait(&repartition_barrier_);
+            } else {
+                update_graph(request);
+            }
+        }
     }
 
     void update_graph(const client_message& message) {
@@ -223,10 +263,15 @@ private:
     std::unordered_map<int, Partition<T>> partitions_;
     std::unordered_map<T, Partition<T>*>* data_to_partition_;
 
+    std::thread graph_thread_;
+    std::queue<struct client_message> graph_requests_queue_;
+    sem_t graph_requests_semaphore_;
+    std::mutex graph_requests_mutex_;
+
     model::Graph<T> workload_graph_;
     model::CutMethod repartition_method_;
     int repartition_interval_;
-    std::thread repartition_thread_;
+    pthread_barrier_t repartition_barrier_;
 };
 
 };
