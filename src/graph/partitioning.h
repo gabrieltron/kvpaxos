@@ -39,7 +39,7 @@ std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions);
 std::vector<int> refennel_cut(const Graph<int>& graph, int n_partitions);
 
 int fennel_inter_cost(
-    const tbb::concurrent_unordered_map<int, int>& edges,
+    const std::unordered_map<int, int>& edges,
     const std::unordered_set<int>& vertex_in_partition
 );
 int fennel_vertice_partition(

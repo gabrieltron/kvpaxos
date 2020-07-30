@@ -85,7 +85,7 @@ std::vector<int> multilevel_cut(
 }
 
 std::unordered_map<int, int> sum_neighbours(
-    const tbb::concurrent_unordered_map<int, int>& edges,
+    const std::unordered_map<int, int>& edges,
     const std::unordered_map<int, int>& vertice_to_partition
 ) {
     std::unordered_map<int, int> partition_sums;

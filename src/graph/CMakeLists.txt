@@ -13,7 +13,6 @@ target_sources(
 target_link_libraries(
     graph
         PUBLIC
-            CONAN_PKG::tbb
             metis
             kahip
 )

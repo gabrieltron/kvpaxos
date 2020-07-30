@@ -3,7 +3,7 @@
 
 
 #include <algorithm>
-#include <tbb/concurrent_unordered_map.h>
+#include <unordered_map>
 #include <vector>
 
 
@@ -16,7 +16,7 @@ public:
 
     void add_vertice(T data, int weight = 0) {
         vertex_weight_[data] = weight;
-        edges_weight_[data] = tbb::concurrent_unordered_map<T, int>();
+        edges_weight_[data] = std::unordered_map<T, int>();
         total_vertex_weight_ += weight;
     }
 
@@ -66,14 +66,14 @@ public:
     int total_edges_weight() const {return total_edges_weight_;}
     int vertice_weight(T vertice) const {return vertex_weight_.at(vertice);}
     int edge_weight(T from, T to) const {return edges_weight_.at(from).at(to);}
-    const tbb::concurrent_unordered_map<T, int>& vertice_edges(T vertice) const {
+    const std::unordered_map<T, int>& vertice_edges(T vertice) const {
         return edges_weight_.at(vertice);
     }
-    const tbb::concurrent_unordered_map<T, int>& vertex() const {return vertex_weight_;}
+    const std::unordered_map<T, int>& vertex() const {return vertex_weight_;}
 
 private:
-    tbb::concurrent_unordered_map<T, int> vertex_weight_;
-    tbb::concurrent_unordered_map<T, tbb::concurrent_unordered_map<T, int>>
+    std::unordered_map<T, int> vertex_weight_;
+    std::unordered_map<T, std::unordered_map<T, int>>
         edges_weight_;
     int n_edges_{0};
     int total_vertex_weight_{0};
