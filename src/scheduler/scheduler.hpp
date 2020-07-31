@@ -119,7 +119,7 @@ public:
                 sync_message.type = SYNC;
 
                 graph_requests_mutex_.lock();
-                    graph_requests_queue_.push(request);
+                    graph_requests_queue_.push(sync_message);
                 graph_requests_mutex_.unlock();
                 sem_post(&graph_requests_semaphore_);
 
