@@ -9,7 +9,6 @@
 #include <math.h>
 #include <metis.h>
 #include <string>
-#include <tbb/concurrent_unordered_map.h>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
