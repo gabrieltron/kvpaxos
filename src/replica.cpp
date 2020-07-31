@@ -26,15 +26,13 @@
  */
 
 
-#include <evpaxos.h>
-#include <evpaxos/paxos.h>
-
 #include <algorithm>
 #include <chrono>
 #include <iostream>
 #include <iterator>
 #include <queue>
 #include <semaphore.h>
+#include <netinet/in.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string>
@@ -43,10 +41,9 @@
 #include <signal.h>
 #include <mutex>
 #include <netinet/tcp.h>
-#include <tbb/concurrent_unordered_map.h>
-#include <tbb/concurrent_vector.h>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "request/request_generation.h"
@@ -60,9 +57,8 @@ using toml_config = toml::basic_value<
 
 static int verbose = 0;
 static int SLEEP = 1;
-static int N_PARTITIONS = 4;
 static bool RUNNING = true;
-const int VALUE_SIZE = 128;
+const int VALUE_SIZE = 4096;
 
 
 static struct sockaddr_in
@@ -193,17 +189,19 @@ to_client_messages(
 		client_message.id = i;
 		client_message.type = request.type();
 		client_message.key = request.key();
-		if (request.args().empty()) {
-			memset(client_message.args, '#', VALUE_SIZE);
-			client_message.args[VALUE_SIZE] = '\0';
-			client_message.size = VALUE_SIZE;
-		}
-		else {
-			for (auto i = 0; i < request.args().size(); i++) {
-				client_message.args[i] = request.args()[i];
+		if (client_message.type == WRITE) {
+			if (request.args().empty()) {
+				memset(client_message.args, '#', VALUE_SIZE);
+				client_message.args[VALUE_SIZE] = '\0';
+				client_message.size = VALUE_SIZE;
 			}
-			client_message.args[request.args().size()] = 0;
-			client_message.size = request.args().size();
+			else {
+				for (auto i = 0; i < request.args().size(); i++) {
+					client_message.args[i] = request.args()[i];
+				}
+				client_message.args[request.args().size()] = 0;
+				client_message.size = request.args().size();
+			}
 		}
 
 		client_messages.emplace_back(client_message);
@@ -224,7 +222,12 @@ execute_requests(
 		auto key = request.key;
 		auto type = static_cast<request_type>(request.type);
 		auto args = request.args;
-		execute_request(storage, key, type, args);
+		auto answer = std::move(execute_request(storage, key, type, args));
+
+        reply_message reply;
+        reply.id = request.id;
+        strncpy(reply.answer, answer.c_str(), answer.size());
+        reply.answer[answer.size()] = '\0';
 		n_executed_requests++;
 	}
 }
