@@ -189,9 +189,9 @@ run(const toml_config& config)
 
 	auto start_execution_timestamp = std::chrono::system_clock::now();
 	execute_requests(*scheduler, client_messages, print_percentage);
-	auto end_execution_timestamp = std::chrono::system_clock::now();
 
 	throughput_thread.join();
+	auto end_execution_timestamp = std::chrono::system_clock::now();
 
 	auto makespan = end_execution_timestamp - start_execution_timestamp;
 	std::cout << "Makespan: " << makespan.count() << "\n";
