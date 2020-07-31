@@ -31,7 +31,7 @@ struct client_message {
 	int key;
 	int type;
 	bool record_timestamp;
-	char args[128];
+	char args[4097];
 	size_t size;
 };
 typedef struct client_message client_message;
