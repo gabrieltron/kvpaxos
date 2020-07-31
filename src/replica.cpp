@@ -49,11 +49,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "evclient/evclient.h"
 #include "request/request_generation.h"
 #include "storage/storage.h"
 #include "types/types.h"
-#include "graph/graph.hpp"
 
 
 using toml_config = toml::basic_value<
@@ -207,7 +205,6 @@ to_client_messages(
 			client_message.args[request.args().size()] = 0;
 			client_message.size = request.args().size();
 		}
-		client_message.record_timestamp = false;
 
 		client_messages.emplace_back(client_message);
 	}
