@@ -143,14 +143,15 @@ void
 print_throughput(int sleep_duration, int n_requests, int& n_executed_requests)
 {
 	auto already_counted = 0;
+	auto counter = 0;
 	while (RUNNING) {
 		std::this_thread::sleep_for(std::chrono::seconds(sleep_duration));
 		auto throughput = n_executed_requests - already_counted;
-		std::cout << std::chrono::system_clock::now().time_since_epoch().count() << ",";
+		std::cout << counter << ",";
 		std::cout << throughput << "\n";
 
 		already_counted += throughput;
-
+		counter++;
 		if (n_executed_requests == n_requests) {
 			break;
 		}
@@ -213,35 +214,21 @@ to_client_messages(
 	return client_messages;
 }
 
-static std::vector<std::chrono::nanoseconds>
+void
 execute_requests(
 	kvstorage::Storage& storage,
 	std::vector<struct client_message>& requests,
-	int print_percentage,
 	int& n_executed_requests)
 {
 	srand (time(NULL));
-	std::vector<std::chrono::nanoseconds> delays;
 
 	for (auto& request: requests) {
-		time_point send_timestamp;
-		if (print_percentage >= rand() % 100 + 1) {
-	    	auto send_timestamp = std::chrono::system_clock::now();
-			request.record_timestamp = true;
-		}
-
 		auto key = request.key;
 		auto type = static_cast<request_type>(request.type);
 		auto args = request.args;
 		execute_request(storage, key, type, args);
 		n_executed_requests++;
-
-		if (request.record_timestamp) {
-			auto delay = std::chrono::system_clock::now() - send_timestamp;
-			delays.emplace_back(delay);
-		}
 	}
-	return delays;
 }
 
 static void
@@ -258,22 +245,14 @@ run(const toml_config& config)
 		print_throughput, SLEEP, requests.size(), std::ref(n_executed_requests)
 	);
 
-	auto print_percentage = toml::find<int>(
-		config, "print_percentage"
-	);
 	auto client_messages = std::move(to_client_messages(requests));
+	auto start_timestamp = std::chrono::system_clock::now();
+	execute_requests(storage, client_messages, n_executed_requests);
+	auto end_timestamp = std::chrono::system_clock::now();
 
-	auto delays = std::move(execute_requests(
-		storage, client_messages, print_percentage, n_executed_requests
-	));
-
+	RUNNING = false;
 	throughput_thread.join();
-
-	for (auto i = 0; i < delays.size(); i++) {
-		auto& delay = delays[i];
-		std::cout << i << "," << delay.count() << "\n";
-	}
-	std::cout << std::endl;
+	std::cout << "Makespan: " << (end_timestamp - start_timestamp).count() << std::endl;
 }
 
 static void
