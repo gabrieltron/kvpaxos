@@ -162,20 +162,21 @@ static kvstorage::Storage
 initialize_storage(const toml_config& config)
 {
 	auto storage = kvstorage::Storage();
-	auto initial_requests = toml::find<std::string>(
-		config, "load_requests_path"
+	auto n_initial_keys = toml::find<int>(
+		config, "n_initial_keys"
 	);
-	if (not initial_requests.empty()) {
-		auto populate_requests = std::move(
-			workload::import_requests(initial_requests, "load_requests")
-		);
 
-		for (auto& request : populate_requests) {
-			auto key = request.key();
-			auto type = static_cast<request_type>(request.type());
-			auto args = request.args();
-			execute_request(storage, key, type, args);
-		}
+	std::string data(VALUE_SIZE, '*');
+	std::vector<workload::Request> populate_requests;
+	for (auto i = 0; i <= n_initial_keys; i++) {
+		populate_requests.emplace_back(WRITE, i, data);
+	}
+
+	for (auto& request : populate_requests) {
+		auto key = request.key();
+		auto type = static_cast<request_type>(request.type());
+		auto args = request.args();
+		execute_request(storage, key, type, args);
 	}
 
 	return storage;
