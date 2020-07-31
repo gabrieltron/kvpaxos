@@ -56,7 +56,6 @@ using toml_config = toml::basic_value<
 static int verbose = 0;
 static int SLEEP = 1;
 static bool RUNNING = true;
-const int VALUE_SIZE = 4096;
 
 
 void
@@ -104,10 +103,9 @@ initialize_scheduler(
 	auto n_initial_keys = toml::find<int>(
 		config, "n_initial_keys"
 	);
-	std::string data(VALUE_SIZE, '*');
 	std::vector<workload::Request> populate_requests;
 	for (auto i = 0; i <= n_initial_keys; i++) {
-		populate_requests.emplace_back(WRITE, i, data);
+		populate_requests.emplace_back(WRITE, i, "");
 	}
 
 	scheduler->process_populate_requests(populate_requests);
@@ -129,20 +127,11 @@ to_client_messages(
 		client_message.id = i;
 		client_message.type = request.type();
 		client_message.key = request.key();
-		if (client_message.type == WRITE) {
-			if (request.args().empty()) {
-				memset(client_message.args, '#', VALUE_SIZE);
-				client_message.args[VALUE_SIZE] = '\0';
-				client_message.size = VALUE_SIZE;
-			}
-			else {
-				for (auto i = 0; i < request.args().size(); i++) {
-					client_message.args[i] = request.args()[i];
-				}
-				client_message.args[request.args().size()] = 0;
-				client_message.size = request.args().size();
-			}
+		for (auto i = 0; i < request.args().size(); i++) {
+			client_message.args[i] = request.args()[i];
 		}
+		client_message.args[request.args().size()] = 0;
+		client_message.size = request.args().size();
 
 		client_messages.emplace_back(client_message);
 	}
