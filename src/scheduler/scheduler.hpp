@@ -94,13 +94,13 @@ public:
             arbitrary_partition->push_request(request);
         }
 
-        graph_requests_mutex_.lock();
-            graph_requests_queue_.push(request);
-        graph_requests_mutex_.unlock();
-        sem_post(&graph_requests_semaphore_);
-
-        n_dispatched_requests_++;
         if (repartition_method_ != model::ROUND_ROBIN) {
+            graph_requests_mutex_.lock();
+                graph_requests_queue_.push(request);
+            graph_requests_mutex_.unlock();
+            sem_post(&graph_requests_semaphore_);
+
+            n_dispatched_requests_++;
             if (
                 n_dispatched_requests_ % repartition_interval_ == 0
             ) {
@@ -179,14 +179,16 @@ private:
 
         round_robin_counter_ = (round_robin_counter_+1) % n_partitions_;
 
-        struct client_message write_message;
-        write_message.type = WRITE;
-        write_message.key = key;
+        if (repartition_method_ != model::ROUND_ROBIN) {
+            struct client_message write_message;
+            write_message.type = WRITE;
+            write_message.key = key;
 
-        graph_requests_mutex_.lock();
-            graph_requests_queue_.push(write_message);
-        graph_requests_mutex_.unlock();
-        sem_post(&graph_requests_semaphore_);
+            graph_requests_mutex_.lock();
+                graph_requests_queue_.push(write_message);
+            graph_requests_mutex_.unlock();
+            sem_post(&graph_requests_semaphore_);
+        }
     }
 
     bool mapped(T key) const {
