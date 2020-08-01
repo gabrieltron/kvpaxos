@@ -1,3 +1,4 @@
+add_subdirectory(compresser)
 add_subdirectory(request)
 #add_subdirectory(evclient)
 add_subdirectory(types)

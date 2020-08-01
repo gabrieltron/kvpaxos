@@ -17,6 +17,7 @@ target_include_directories(
 target_link_libraries(
     storage
         PRIVATE
+            compresser
             types
             CONAN_PKG::tbb
 )
