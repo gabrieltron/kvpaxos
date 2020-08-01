@@ -233,10 +233,10 @@ run(const toml_config& config)
 	auto client_messages = std::move(to_client_messages(requests));
 	auto start_timestamp = std::chrono::system_clock::now();
 	execute_requests(storage, client_messages, n_executed_requests);
-	auto end_timestamp = std::chrono::system_clock::now();
 
 	RUNNING = false;
 	throughput_thread.join();
+	auto end_timestamp = std::chrono::system_clock::now();
 	std::cout << "Makespan: " << (end_timestamp - start_timestamp).count() << std::endl;
 }
 
