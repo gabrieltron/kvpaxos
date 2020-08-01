@@ -7,6 +7,7 @@ include(cmake/conan.cmake)
 
 conan(
     PACKAGES
+        boost/1.72.0
         toml11/3.4.0
         libevent/2.1.11
         tbb/2020.1
