@@ -3,12 +3,16 @@
 
 namespace kvstorage {
 
+const int VALUE_SIZE = 128;
+std::string TEMPLATE_VALUE('*', VALUE_SIZE);
+
+
 std::string Storage::read(int key) const {
     return storage_.at(key);
 }
 
 void Storage::write(int key, const std::string& value) {
-    storage_[key] = value;
+    storage_[key] = TEMPLATE_VALUE;
 }
 
 std::vector<std::string> Storage::scan(int start, int length) {
