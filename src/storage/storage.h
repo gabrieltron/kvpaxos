@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "compresser/compresser.h"
 #include "tbb/concurrent_unordered_map.h"
 #include "types/types.h"
 
