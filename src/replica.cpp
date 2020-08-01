@@ -212,13 +212,7 @@ execute_requests(
 		auto key = request.key;
 		auto type = static_cast<request_type>(request.type);
 		auto args = request.args;
-		auto answer = std::move(execute_request(storage, key, type, args));
-
-        reply_message reply;
-        reply.id = request.id;
-        strncpy(reply.answer, answer.c_str(), answer.size());
-        reply.answer[answer.size()] = '\0';
-		n_executed_requests++;
+		execute_request(storage, key, type, args);
 	}
 }
 
