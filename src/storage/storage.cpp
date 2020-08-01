@@ -4,7 +4,7 @@
 namespace kvstorage {
 
 const int VALUE_SIZE = 128;
-std::string TEMPLATE_VALUE('*', VALUE_SIZE);
+std::string TEMPLATE_VALUE(VALUE_SIZE, '*');
 
 
 std::string Storage::read(int key) const {
