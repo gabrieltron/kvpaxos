@@ -11,5 +11,5 @@ target_sources(
 target_link_libraries(
     compresser
         PUBLIC
-            CONAN_PKG::boost
+            CONAN_PKG::zlib
 )
