@@ -204,13 +204,6 @@ private:
                 continue;
             }
 
-            reply_message reply;
-            reply.id = request.id;
-            strncpy(reply.answer, answer.c_str(), answer.size());
-            reply.answer[answer.size()] = '\0';
-
-            //answer_client((char *)&reply, sizeof(reply_message), request);
-
             n_executed_requests_++;
         }
     }
