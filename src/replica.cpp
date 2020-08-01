@@ -213,6 +213,7 @@ execute_requests(
 		auto type = static_cast<request_type>(request.type);
 		auto args = request.args;
 		execute_request(storage, key, type, args);
+		n_executed_requests++;
 	}
 }
 
