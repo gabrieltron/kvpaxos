@@ -78,6 +78,10 @@ public:
         return n_executed_requests;
     }
 
+    const std::vector<time_point>& repartition_timestamps() const {
+        return repartition_timestamps_;
+    }
+
     void schedule_and_answer(struct client_message& request) {
         auto type = static_cast<request_type>(request.type);
         if (type == SYNC) {
@@ -251,6 +255,9 @@ private:
     }
 
     void repartition_data() {
+        auto start_timestamp = std::chrono::system_clock::now();
+        repartition_timestamps_.emplace_back(start_timestamp);
+
         auto partition_scheme = std::move(
             model::cut_graph(workload_graph_, partitions_.size(), repartition_method_)
         );
@@ -282,6 +289,7 @@ private:
     sem_t graph_requests_semaphore_;
     std::mutex graph_requests_mutex_;
 
+    std::vector<time_point> repartition_timestamps_;
     model::Graph<T> workload_graph_;
     model::CutMethod repartition_method_;
     int repartition_interval_;

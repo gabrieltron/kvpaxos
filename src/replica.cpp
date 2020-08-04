@@ -185,6 +185,12 @@ run(const toml_config& config)
 
 	auto makespan = end_execution_timestamp - start_execution_timestamp;
 	std::cout << "Makespan: " << makespan.count() << "\n";
+
+	auto& repartition_times = scheduler->repartition_timestamps();
+	std::cout << "Repartition at: ";
+	for (auto& repartition_time : repartition_times) {
+		std::cout << (repartition_time - start_execution_timestamp).count() << " ";
+	}
 	std::cout << std::endl;
 }
 
