@@ -114,6 +114,7 @@ public:
 
                 pthread_barrier_wait(&repartition_barrier_);
                 repartition_data();
+                sync_all_partitions();
             }
         }
     }
