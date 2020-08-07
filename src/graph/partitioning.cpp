@@ -111,6 +111,7 @@ int fennel_vertice_partition(
     int vertice,
     const std::vector<int>& partitions_weight,
     const std::unordered_map<int, int>& vertice_to_partition,
+    double alpha,
     double gamma
 ) {
     double biggest_score = -DBL_MAX;
@@ -132,7 +133,7 @@ int fennel_vertice_partition(
         auto intra_cost =
             (std::pow(partition_weight + graph.vertice_weight(vertice), gamma));
         intra_cost -= std::pow(partition_weight, gamma);
-        intra_cost *= gamma;
+        intra_cost *= alpha;
 
         auto score = inter_cost - intra_cost;
         if (score > biggest_score) {
@@ -164,7 +165,7 @@ std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions) {
     auto sorted_vertex = std::move(graph.sorted_vertex());
     for (auto& vertice : sorted_vertex) {
         auto partition = fennel_vertice_partition(
-            graph, vertice, partitions_weight, vertice_to_partition, gamma
+            graph, vertice, partitions_weight, vertice_to_partition, alpha, gamma
         );
         partitions_weight[partition] += graph.vertice_weight(vertice);
         vertice_to_partition[vertice] = partition;
@@ -192,7 +193,8 @@ std::vector<int> refennel_cut(const Graph<int>& graph, int n_partitions) {
     auto sorted_vertex = std::move(graph.sorted_vertex());
     for (auto& vertice : sorted_vertex) {
         auto new_partition = fennel_vertice_partition(
-            graph, vertice, refennel_partitions_size, refennel_vertice_to_partition, gamma
+            graph, vertice, refennel_partitions_size, refennel_vertice_to_partition,
+            alpha, gamma
         );
 
         if (refennel_vertice_to_partition.find(vertice) != refennel_vertice_to_partition.end()) {
