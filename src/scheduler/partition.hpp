@@ -80,7 +80,7 @@ public:
         weight_.erase(data);
     }
 
-    void increase_weight(const T& data, int weight) {
+    void increase_weight(const T& data, int weight = 1) {
         weight_[data] += weight;
         total_weight_ += weight;
     }

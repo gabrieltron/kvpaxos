@@ -184,6 +184,8 @@ private:
             struct client_message write_message;
             write_message.type = WRITE;
             write_message.key = key;
+            write_message.s_addr = (unsigned long) data_to_partition_->at(partition_id);
+            write_message.size = 100;
 
             graph_requests_mutex_.lock();
                 graph_requests_queue_.push(write_message);
@@ -207,6 +209,13 @@ private:
             if (request.type == SYNC) {
                 pthread_barrier_wait(&repartition_barrier_);
             } else {
+                if (request.type == WRITE and request.size == 100) {
+                    data_to_partition_copy_.emplace(
+                        request.key,
+                        (Partition<T>*) request.s_addr
+                    );
+                }
+
                 update_graph(request);
             }
         }
@@ -226,6 +235,7 @@ private:
             }
 
             workload_graph_.increase_vertice_weight(data[i]);
+            data_to_partition_copy_.at(data[i])->increase_weight(data[i]);
             for (auto j = i+1; j < data.size(); j++) {
                 if (not workload_graph_.vertice_exists(data[j])) {
                     workload_graph_.add_vertice(data[j]);
@@ -241,7 +251,7 @@ private:
 
     void repartition_data() {
         auto partition_scheme = std::move(
-            model::cut_graph(workload_graph_, partitions_.size(), repartition_method_)
+            model::cut_graph(workload_graph_, partitions_, repartition_method_)
         );
 
         delete data_to_partition_;
@@ -256,6 +266,8 @@ private:
             auto data = sorted_vertex[i];
             data_to_partition_->emplace(data, &partitions_.at(partition));
         }
+
+        data_to_partition_copy_ = *data_to_partition_;
     }
 
     int n_partitions_;
@@ -265,6 +277,7 @@ private:
     kvstorage::Storage storage_;
     std::unordered_map<int, Partition<T>> partitions_;
     std::unordered_map<T, Partition<T>*>* data_to_partition_;
+    std::unordered_map<T, Partition<T>*> data_to_partition_copy_;
 
     std::thread graph_thread_;
     std::queue<struct client_message> graph_requests_queue_;

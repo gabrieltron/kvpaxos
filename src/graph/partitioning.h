@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "graph.hpp"
+#include "scheduler/partition.hpp"
 
 
 namespace model {
@@ -30,13 +31,18 @@ const std::unordered_map<std::string, CutMethod> string_to_cut_method({
 });
 
 std::vector<int> cut_graph (
-    const Graph<int>& graph, int n_paritions, CutMethod method
+    const Graph<int>& graph,
+    std::unordered_map<int, kvpaxos::Partition<int>*>& partitions,
+    CutMethod method
 );
 
 std::vector<int> multilevel_cut
     (const Graph<int>& graph, int n_partitions, CutMethod cut_method);
 std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions);
-std::vector<int> refennel_cut(const Graph<int>& graph, int n_partitions);
+std::vector<int> refennel_cut(
+    const Graph<int>& graph,
+    std::unordered_map<int, kvpaxos::Partition<int>*>& partitions
+);
 
 int fennel_inter_cost(
     const tbb::concurrent_unordered_map<int, int>& edges,
