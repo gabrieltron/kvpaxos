@@ -47,9 +47,14 @@ int fennel_inter_cost(
     const std::unordered_map<int, int>& edges,
     const std::unordered_set<int>& vertex_in_partition
 );
+template <typename T>
 int fennel_vertice_partition(
-    const Graph<int>& graph, int vertice,
-    const std::vector<std::pair<std::unordered_set<int>, int>>& partitions,
+    const Graph<int>& graph,
+    int vertice,
+    const T& partitions,
+    const std::unordered_map<int, int>& vertice_to_partition,
+    int max_partition_size,
+    double alpha,
     double gamma
 );
 
