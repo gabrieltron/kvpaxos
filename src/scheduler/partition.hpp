@@ -76,7 +76,7 @@ public:
 
     void remove_data(const T& data) {
         data_set_.erase(data);
-        total_weight_ -= weight_[data];
+        total_weight_ -= weight_.at(data);
         weight_.erase(data);
     }
 

@@ -210,11 +210,13 @@ private:
                 pthread_barrier_wait(&repartition_barrier_);
             } else {
                 if (request.type == WRITE and request.size == 100) {
-                    data_to_partition_copy_.emplace(
+                    auto partition = (Partition<T>*) request.s_addr;
+		    data_to_partition_copy_.emplace(
                         request.key,
-                        (Partition<T>*) request.s_addr
+                       partition
                     );
-                }
+		    partition->insert_data(request.key);
+		}
 
                 update_graph(request);
             }
