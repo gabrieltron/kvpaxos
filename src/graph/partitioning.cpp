@@ -175,7 +175,7 @@ std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions) {
     std::unordered_map<int, int> vertice_to_partition;
     std::vector<int> final_partitioning;
     auto sorted_vertex = std::move(graph.sorted_vertex());
-    auto partition_max_size = 1.2 * graph.total_vertex_weight();
+    auto partition_max_size = 1.2 * graph.total_vertex_weight() / n_partitions;
     for (auto& vertice : sorted_vertex) {
         auto partition = fennel_vertice_partition<std::unordered_map<int, dummy_partition*>>(
             graph, vertice, partitions, vertice_to_partition, partition_max_size, alpha, gamma
@@ -212,7 +212,7 @@ std::vector<int> refennel_cut(
 
     auto final_partitioning = std::vector<int>();
     auto sorted_vertex = std::move(graph.sorted_vertex());
-    auto partition_max_size = 1.2 * graph.total_vertex_weight();
+    auto partition_max_size = 1.2 * graph.total_vertex_weight() / n_partitions;
     for (auto& vertice : sorted_vertex) {
         auto new_partition = fennel_vertice_partition<std::unordered_map<int, kvpaxos::Partition<int>*>>(
             graph, vertice, partitions, refennel_vertice_to_partition,
