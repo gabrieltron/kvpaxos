@@ -190,7 +190,6 @@ private:
 
     void add_key(T key) {
         auto partition_id = round_robin_counter_;
-//        partitions_.at(partition_id)->insert_data(key);
         data_to_partition_->emplace(key, partitions_.at(partition_id));
 
         round_robin_counter_ = (round_robin_counter_+1) % n_partitions_;
@@ -200,7 +199,7 @@ private:
             write_message.type = WRITE;
             write_message.key = key;
             write_message.s_addr = (unsigned long) data_to_partition_->at(partition_id);
-            write_message.size = 100;
+            write_message.sin_port = 1;
 
             graph_requests_mutex_.lock();
                 graph_requests_queue_.push(write_message);
@@ -224,15 +223,12 @@ private:
             if (request.type == SYNC) {
                 pthread_barrier_wait(&repartition_barrier_);
             } else {
-                if (request.type == WRITE and request.size == 100) {
+                if (request.type == WRITE and request.sin_port == 1) {
                     auto partition = (Partition<T>*) request.s_addr;
-		    data_to_partition_copy_.emplace(
-                        request.key,
-                       partition
-                    );
-		    partition->insert_data(request.key);
-		}
-
+		            data_to_partition_copy_.emplace(request.key, partition);
+		            partition->insert_data(request.key);
+                    continue;
+                }
                 update_graph(request);
             }
         }
