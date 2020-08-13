@@ -127,7 +127,6 @@ int fennel_vertice_partition(
     double gamma
 ) {
     double biggest_score = -DBL_MAX;
-    auto id = 0;
     auto designated_partition = -1;
     auto neighbours_in_partition = std::move(
         sum_neighbours<T>(graph.vertice_edges(vertice), vertice_to_partition)
@@ -155,9 +154,8 @@ int fennel_vertice_partition(
         double score = inter_cost - intra_cost;
         if (score > biggest_score) {
             biggest_score = score;
-            designated_partition = id;
+            designated_partition = i;
         }
-        id++;
     }
 
     return designated_partition;
