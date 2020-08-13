@@ -271,7 +271,12 @@ private:
         repartition_timestamps_.emplace_back(start_timestamp);
 
         auto partition_scheme = std::move(
-            model::cut_graph(workload_graph_, partitions_, repartition_method_)
+            model::cut_graph(
+                workload_graph_,
+                partitions_,
+                repartition_method_,
+                *data_to_partition_
+            )
         );
 
         delete data_to_partition_;
