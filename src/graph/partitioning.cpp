@@ -219,6 +219,9 @@ std::vector<int> refennel_cut(
     auto sorted_vertex = std::move(graph.sorted_vertex());
     auto partition_max_size = 1.2 * graph.total_vertex_weight() / n_partitions;
     for (auto& vertice : sorted_vertex) {
+        auto* old_partition = old_data_to_partition.at(vertice);
+        old_partition->remove_data(vertice);
+
         auto new_partition = fennel_vertice_partition<kvpaxos::Partition<int>>(
             graph, vertice, partitions, old_data_to_partition,
             partition_max_size, alpha, gamma
@@ -231,8 +234,6 @@ std::vector<int> refennel_cut(
                 );
         }
 
-        auto* old_partition = old_data_to_partition.at(vertice);
-        old_partition->remove_data(vertice);
         partitions.at(new_partition)->insert_data(vertice, graph.vertice_weight(vertice));
 
         final_partitioning.push_back(new_partition);
