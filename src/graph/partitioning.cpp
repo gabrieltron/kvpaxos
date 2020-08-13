@@ -235,7 +235,7 @@ std::vector<int> refennel_cut(
 
         auto* old_partition = old_data_to_partition.at(vertice);
         old_partition->remove_data(vertice);
-        partitions.at(new_partition)->insert_data(vertice);
+        partitions.at(new_partition)->insert_data(vertice, graph.vertice_weight(vertice));
 
         final_partitioning.push_back(new_partition);
     }
