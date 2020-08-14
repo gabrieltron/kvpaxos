@@ -22,7 +22,7 @@ std::string compress(const std::string& str,
     zs.avail_in = str.size();           // set the z_stream's input
 
     int ret;
-    char outbuffer[32768];
+    char outbuffer[4096];
     std::string outstring;
 
     // retrieve the compressed bytes blockwise
@@ -63,7 +63,7 @@ std::string decompress(const std::string& str)
     zs.avail_in = str.size();
 
     int ret;
-    char outbuffer[32768];
+    char outbuffer[4096];
     std::string outstring;
 
     // get the decompressed bytes blockwise using repeated calls to inflate
