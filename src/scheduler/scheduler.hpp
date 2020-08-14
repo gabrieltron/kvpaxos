@@ -198,7 +198,7 @@ private:
             struct client_message write_message;
             write_message.type = WRITE;
             write_message.key = key;
-            write_message.s_addr = (unsigned long) data_to_partition_->at(partition_id);
+            write_message.s_addr = (unsigned long) partitions_.at(partition_id);
             write_message.sin_port = 1;
 
             graph_requests_mutex_.lock();
