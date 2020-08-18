@@ -71,13 +71,11 @@ public:
     }
 
     void insert_data(const T& data, int weight = 0) {
-        data_set_.insert(data);
         weight_[data] = weight;
         total_weight_ += weight;
     }
 
     void remove_data(const T& data) {
-        data_set_.erase(data);
         total_weight_ -= weight_.at(data);
         weight_.erase(data);
     }
@@ -93,10 +91,6 @@ public:
 
     int id() const {
         return id_;
-    }
-
-    const std::unordered_set<T>& data() const {
-        return data_set_;
     }
 
     int n_executed_requests() const {
@@ -218,7 +212,6 @@ private:
     std::mutex queue_mutex_;
 
     int total_weight_ = 0;
-    std::unordered_set<T> data_set_;
     std::unordered_map<T, int> weight_;
 };
 
