@@ -21,7 +21,8 @@ std::vector<int> cut_graph (
     std::unordered_map<int, kvpaxos::Partition<int>*>& partitions,
     CutMethod method,
     const std::unordered_map<int, kvpaxos::Partition<int>*>& old_data_to_partition =
-        std::unordered_map<int, kvpaxos::Partition<int>*>()
+        std::unordered_map<int, kvpaxos::Partition<int>*>(),
+    bool firt_repartition = true
 ) {
     if (method == METIS) {
         return multilevel_cut(graph, partitions.size(), method);
@@ -30,7 +31,7 @@ std::vector<int> cut_graph (
     } else if (method == FENNEL) {
         return fennel_cut(graph, partitions.size());
     } else {
-        return refennel_cut(graph, old_data_to_partition, partitions);
+        return refennel_cut(graph, old_data_to_partition, partitions, firt_repartition);
     }
 }
 
@@ -205,8 +206,13 @@ std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions) {
 std::vector<int> refennel_cut(
     const Graph<int>& graph,
     const std::unordered_map<int, kvpaxos::Partition<int>*>& old_data_to_partition,
-    std::unordered_map<int, kvpaxos::Partition<int>*>& partitions
+    std::unordered_map<int, kvpaxos::Partition<int>*>& partitions,
+    bool first_repartition
 ) {
+    if (first_repartition) {
+        return fennel_cut(graph, partitions.size());
+    }
+
     const auto n_partitions = partitions.size();
 
     const auto edges_weight = graph.total_edges_weight();

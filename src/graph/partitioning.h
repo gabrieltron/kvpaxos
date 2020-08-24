@@ -33,8 +33,9 @@ std::vector<int> cut_graph (
     const Graph<int>& graph,
     std::unordered_map<int, kvpaxos::Partition<int>*>& partitions,
     CutMethod method,
-    const std::unordered_map<int, kvpaxos::Partition<int>*>& old_data_to_partition
+    const std::unordered_map<int, kvpaxos::Partition<int>*>& old_data_to_partition,
         /* = std::unordered_map<int, kvpaxos::Partition<int>*>() */
+    bool first_repartition /* = true */
 );
 
 std::vector<int> multilevel_cut
@@ -43,7 +44,8 @@ std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions);
 std::vector<int> refennel_cut(
     const Graph<int>& graph,
     const std::unordered_map<int, kvpaxos::Partition<int>*>& old_data_to_partition,
-    std::unordered_map<int, kvpaxos::Partition<int>*>& partitions
+    std::unordered_map<int, kvpaxos::Partition<int>*>& partitions,
+    bool first_repartition
 );
 
 int fennel_inter_cost(
