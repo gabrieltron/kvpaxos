@@ -210,7 +210,15 @@ std::vector<int> refennel_cut(
     bool first_repartition
 ) {
     if (first_repartition) {
-        return fennel_cut(graph, partitions.size());
+        auto new_mapping = fennel_cut(graph, partitions.size());
+        for (auto data = 0; data < new_mapping.size(); data++) {
+            auto* old_partition = old_data_to_partition.at(data);
+            old_partition->remove_data(data);
+
+            auto* new_partition = partitions.at(new_mapping[data]);
+            new_partition->insert_data(data, graph.vertice_weight(data));
+        }
+        return new_mapping;
     }
 
     const auto n_partitions = partitions.size();
