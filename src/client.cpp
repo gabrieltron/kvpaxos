@@ -20,7 +20,7 @@
 
 
 const int OUTSTANDING = 1;
-const int VALUE_SIZE = 128;
+const int VALUE_SIZE = 4096;
 
 using toml_config = toml::basic_value<
 	toml::discard_comments, std::unordered_map, std::vector
