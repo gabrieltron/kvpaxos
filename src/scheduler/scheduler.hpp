@@ -39,15 +39,11 @@ public:
         for (auto i = 0; i < n_partitions_; i++) {
             partitions_.emplace(i, i);
         }
-        data_to_partition_ = new std::unordered_map<T, Partition<T>*>();
+        data_to_partition_id_ = std::unordered_map<T, int>();
 
         sem_init(&graph_requests_semaphore_, 0, 0);
         pthread_barrier_init(&repartition_barrier_, NULL, 2);
         graph_thread_ = std::thread(&Scheduler<T>::update_graph_loop, this);
-    }
-
-    ~Scheduler() {
-        delete data_to_partition_;
     }
 
     void process_populate_requests(const std::vector<workload::Request>& requests) {
@@ -79,19 +75,20 @@ public:
             }
         }
 
-        auto partitions = std::move(involved_partitions(request));
-        if (partitions.empty()) {
+        auto partitions_ids = std::move(involved_partitions(request));
+        if (partitions_ids.empty()) {
             request.type = ERROR;
             return partitions_.at(0).push_request(request);
         }
 
-        auto arbitrary_partition = *begin(partitions);
-        if (partitions.size() > 1) {
-            sync_partitions(partitions);
-            arbitrary_partition->push_request(request);
-            sync_partitions(partitions);
+        auto arbitrary_partition_id = *begin(partitions_ids);
+        auto& arbitrary_partition = partitions_.at(arbitrary_partition_id);
+        if (partitions_ids.size() > 1) {
+            sync_partitions(partitions_ids);
+            arbitrary_partition.push_request(request);
+            sync_partitions(partitions_ids);
         } else {
-            arbitrary_partition->push_request(request);
+            arbitrary_partition.push_request(request);
         }
 
         if (repartition_method_ != model::ROUND_ROBIN) {
@@ -120,10 +117,10 @@ public:
     }
 
 private:
-    std::unordered_set<Partition<T>*> involved_partitions(
+    std::unordered_set<int> involved_partitions(
         const struct client_message& request)
     {
-        std::unordered_set<Partition<T>*> partitions;
+        std::unordered_set<int> involved_partitions_ids;
         auto type = static_cast<request_type>(request.type);
 
         auto range = 1;
@@ -133,13 +130,13 @@ private:
 
         for (auto i = 0; i < range; i++) {
             if (not mapped(request.key + i)) {
-                return std::unordered_set<Partition<T>*>();
+                return std::unordered_set<int>();
             }
 
-            partitions.insert(data_to_partition_->at(request.key + i));
+            involved_partitions_ids.insert(data_to_partition_id_.at(request.key + i));
         }
 
-        return partitions;
+        return involved_partitions_ids;
     }
 
     struct client_message create_sync_request(int n_partitions) {
@@ -156,27 +153,26 @@ private:
         return sync_message;
     }
 
-    void sync_partitions(const std::unordered_set<Partition<T>*>& partitions) {
-        auto sync_message = std::move(
-            create_sync_request(partitions.size())
-        );
-        for (auto partition : partitions) {
-            partition->push_request(sync_message);
+    void sync_partitions(const std::unordered_set<int>& partitions_ids) {
+        auto sync_message = create_sync_request(partitions_ids.size());
+        for (auto partition_id : partitions_ids) {
+            auto& partition = partitions_.at(partition_id);
+            partition.push_request(sync_message);
         }
     }
 
     void sync_all_partitions() {
-        std::unordered_set<Partition<T>*> partitions;
+        std::unordered_set<int> partitions_ids;
         for (auto i = 0; i < partitions_.size(); i++) {
-            partitions.insert(&partitions_.at(i));
+            partitions_ids.insert(i);
         }
-        sync_partitions(partitions);
+        sync_partitions(partitions_ids);
     }
 
     void add_key(T key) {
         auto partition_id = round_robin_counter_;
         partitions_.at(partition_id).insert_data(key);
-        data_to_partition_->emplace(key, &partitions_.at(partition_id));
+        data_to_partition_id_.emplace(key, partition_id);
 
         round_robin_counter_ = (round_robin_counter_+1) % n_partitions_;
 
@@ -184,8 +180,6 @@ private:
             struct client_message write_message;
             write_message.type = WRITE;
             write_message.key = key;
-            write_message.s_addr = (unsigned long) data_to_partition_->at(partition_id);
-            write_message.size = 100;
 
             graph_requests_mutex_.lock();
                 graph_requests_queue_.push(write_message);
@@ -195,7 +189,7 @@ private:
     }
 
     bool mapped(T key) const {
-        return data_to_partition_->find(key) != data_to_partition_->end();
+        return data_to_partition_id_.find(key) != data_to_partition_id_.end();
     }
 
     void update_graph_loop() {
@@ -209,15 +203,6 @@ private:
             if (request.type == SYNC) {
                 pthread_barrier_wait(&repartition_barrier_);
             } else {
-                if (request.type == WRITE and request.size == 100) {
-                    auto partition = (Partition<T>*) request.s_addr;
-		    data_to_partition_copy_.emplace(
-                        request.key,
-                       partition
-                    );
-		    partition->insert_data(request.key);
-		}
-
                 update_graph(request);
             }
         }
@@ -237,7 +222,6 @@ private:
             }
 
             workload_graph_.increase_vertice_weight(data[i]);
-            data_to_partition_copy_.at(data[i])->increase_weight(data[i]);
             for (auto j = i+1; j < data.size(); j++) {
                 if (not workload_graph_.vertice_exists(data[j])) {
                     workload_graph_.add_vertice(data[j]);
@@ -256,20 +240,17 @@ private:
             model::cut_graph(workload_graph_, partitions_, repartition_method_)
         );
 
-        delete data_to_partition_;
-        data_to_partition_ = new std::unordered_map<T, Partition<T>*>();
         auto sorted_vertex = std::move(workload_graph_.sorted_vertex());
+        data_to_partition_id_ = std::unordered_map<T, int>();
         for (auto i = 0; i < partition_scheme.size(); i++) {
-            auto partition = partition_scheme[i];
-            if (partition >= n_partitions_) {
-                printf("ERROR: partition was %d!\n", partition);
+            auto partition_id = partition_scheme[i];
+            if (partition_id >= n_partitions_) {
+                printf("ERROR: partition was %d!\n", partition_id);
                 fflush(stdout);
             }
             auto data = sorted_vertex[i];
-            data_to_partition_->emplace(data, &partitions_.at(partition));
+            data_to_partition_id_.emplace(data, partition_id);
         }
-
-        data_to_partition_copy_ = *data_to_partition_;
     }
 
     int n_partitions_;
@@ -278,8 +259,7 @@ private:
     int n_dispatched_requests_ = 0;
     kvstorage::Storage storage_;
     std::unordered_map<int, Partition<T>> partitions_;
-    std::unordered_map<T, Partition<T>*>* data_to_partition_;
-    std::unordered_map<T, Partition<T>*> data_to_partition_copy_;
+    std::unordered_map<T, int> data_to_partition_id_;
 
     std::thread graph_thread_;
     std::queue<struct client_message> graph_requests_queue_;
