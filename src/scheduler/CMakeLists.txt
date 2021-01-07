@@ -5,9 +5,11 @@ target_sources(
         PUBLIC
             scheduler.hpp
             partition.hpp
+            pattern_tracker.hpp
         PRIVATE
             scheduler.cpp
             partition.cpp
+            pattern_tracker.cpp
 )
 
 target_include_directories(

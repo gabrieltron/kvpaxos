@@ -15,9 +15,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "graph/graph.hpp"
 #include "graph/partitioning.h"
 #include "partition.hpp"
+#include "pattern_tracker.hpp"
 #include "request/request.hpp"
 #include "storage/storage.h"
 #include "types/types.h"
@@ -34,16 +34,15 @@ public:
                 model::CutMethod repartition_method
     ) : n_partitions_{n_partitions},
         repartition_interval_{repartition_interval},
-        repartition_method_{repartition_method}
+        repartition_method_{repartition_method},
+        pattern_tracker_{PatternTracker<T>()},
+        data_to_partition_id_{std::unordered_map<T, int>()}
     {
         for (auto i = 0; i < n_partitions_; i++) {
             partitions_.emplace(i, i);
         }
-        data_to_partition_id_ = std::unordered_map<T, int>();
 
-        sem_init(&graph_requests_semaphore_, 0, 0);
         pthread_barrier_init(&repartition_barrier_, NULL, 2);
-        graph_thread_ = std::thread(&Scheduler<T>::update_graph_loop, this);
     }
 
     void process_populate_requests(const std::vector<workload::Request>& requests) {
@@ -57,6 +56,7 @@ public:
         for (auto& kv : partitions_) {
             kv.second.start_worker_thread();
         }
+        pattern_tracker_.run();
     }
 
     int n_executed_requests() {
@@ -92,23 +92,16 @@ public:
         }
 
         if (repartition_method_ != model::ROUND_ROBIN) {
-            graph_requests_mutex_.lock();
-                graph_requests_queue_.push(request);
-            graph_requests_mutex_.unlock();
-            sem_post(&graph_requests_semaphore_);
-
+            pattern_tracker_.push_request(request);
             n_dispatched_requests_++;
             if (
                 n_dispatched_requests_ % repartition_interval_ == 0
             ) {
                 struct client_message sync_message;
                 sync_message.type = SYNC;
+                sync_message.s_addr = (unsigned long) &repartition_barrier_;
 
-                graph_requests_mutex_.lock();
-                    graph_requests_queue_.push(sync_message);
-                graph_requests_mutex_.unlock();
-                sem_post(&graph_requests_semaphore_);
-
+                pattern_tracker_.push_request(sync_message);
                 pthread_barrier_wait(&repartition_barrier_);
                 repartition_data();
                 sync_all_partitions();
@@ -173,74 +166,20 @@ private:
         auto partition_id = round_robin_counter_;
         partitions_.at(partition_id).insert_data(key);
         data_to_partition_id_.emplace(key, partition_id);
-
         round_robin_counter_ = (round_robin_counter_+1) % n_partitions_;
-
-        if (repartition_method_ != model::ROUND_ROBIN) {
-            struct client_message write_message;
-            write_message.type = WRITE;
-            write_message.key = key;
-
-            graph_requests_mutex_.lock();
-                graph_requests_queue_.push(write_message);
-            graph_requests_mutex_.unlock();
-            sem_post(&graph_requests_semaphore_);
-        }
     }
 
     bool mapped(T key) const {
         return data_to_partition_id_.find(key) != data_to_partition_id_.end();
     }
 
-    void update_graph_loop() {
-        while(true) {
-            sem_wait(&graph_requests_semaphore_);
-            graph_requests_mutex_.lock();
-                auto request = std::move(graph_requests_queue_.front());
-                graph_requests_queue_.pop();
-            graph_requests_mutex_.unlock();
-
-            if (request.type == SYNC) {
-                pthread_barrier_wait(&repartition_barrier_);
-            } else {
-                update_graph(request);
-            }
-        }
-    }
-
-    void update_graph(const client_message& message) {
-        std::vector<int> data{message.key};
-        if (message.type == SCAN) {
-            for (auto i = 1; i < std::stoi(message.args); i++) {
-                data.emplace_back(message.key+i);
-            }
-        }
-
-        for (auto i = 0; i < data.size(); i++) {
-            if (not workload_graph_.vertice_exists(data[i])) {
-                workload_graph_.add_vertice(data[i]);
-            }
-
-            workload_graph_.increase_vertice_weight(data[i]);
-            for (auto j = i+1; j < data.size(); j++) {
-                if (not workload_graph_.vertice_exists(data[j])) {
-                    workload_graph_.add_vertice(data[j]);
-                }
-                if (not workload_graph_.are_connected(data[i], data[j])) {
-                    workload_graph_.add_edge(data[i], data[j]);
-                }
-
-                workload_graph_.increase_edge_weight(data[i], data[j]);
-            }
-        }
-    }
-
     void repartition_data() {
+        const auto& workload_graph = pattern_tracker_.workload_graph();
         auto partition_scheme = std::move(
-            model::cut_graph(workload_graph_, partitions_, repartition_method_)
+            model::cut_graph(workload_graph, partitions_, repartition_method_)
         );
 
-        auto sorted_vertex = std::move(workload_graph_.sorted_vertex());
+        auto sorted_vertex = std::move(workload_graph.sorted_vertex());
         data_to_partition_id_ = std::unordered_map<T, int>();
         for (auto i = 0; i < partition_scheme.size(); i++) {
             auto partition_id = partition_scheme[i];
@@ -257,16 +196,11 @@ private:
     int round_robin_counter_ = 0;
     int sync_counter_ = 0;
     int n_dispatched_requests_ = 0;
+    PatternTracker<T> pattern_tracker_;
     kvstorage::Storage storage_;
     std::unordered_map<int, Partition<T>> partitions_;
     std::unordered_map<T, int> data_to_partition_id_;
 
-    std::thread graph_thread_;
-    std::queue<struct client_message> graph_requests_queue_;
-    sem_t graph_requests_semaphore_;
-    std::mutex graph_requests_mutex_;
-
-    model::Graph<T> workload_graph_;
     model::CutMethod repartition_method_;
     int repartition_interval_;
     pthread_barrier_t repartition_barrier_;
