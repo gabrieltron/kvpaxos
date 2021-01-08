@@ -32,7 +32,8 @@ const std::unordered_map<std::string, CutMethod> string_to_cut_method({
 
 std::vector<int> cut_graph (
     const Graph<int>& graph,
-    std::unordered_map<int, kvpaxos::Partition<int>>& partitions,
+    std::unordered_map<int, int>& vertice_to_partition,
+    std::unordered_map<int, int>& weight_per_partition,
     CutMethod method
 );
 
@@ -41,22 +42,22 @@ std::vector<int> multilevel_cut
 std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions);
 std::vector<int> refennel_cut(
     const Graph<int>& graph,
-    std::unordered_map<int, kvpaxos::Partition<int>>& partitions
+    std::unordered_map<int, int>& vertice_to_partition,
+    std::unordered_map<int, int>& size_per_partition
 );
 
 int fennel_inter_cost(
     const tbb::concurrent_unordered_map<int, int>& edges,
     const std::unordered_set<int>& vertex_in_partition
 );
-template <typename T>
 int fennel_vertice_partition(
-    const Graph<int>& graph,
     int vertice,
-    const T& partitions,
-    const std::unordered_map<int, int>& vertice_to_partition,
-    int max_partition_size,
     double alpha,
-    double gamma
+    double gamma,
+    int max_partition_size,
+    const Graph<int>& graph,
+    const std::unordered_map<int, int>& vertice_to_partition,
+    const std::unordered_map<int, int>& weight_per_partition
 );
 
 }

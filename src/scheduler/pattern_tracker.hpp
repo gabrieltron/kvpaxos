@@ -7,6 +7,7 @@
 #include <queue>
 #include <semaphore.h>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "graph/graph.hpp"
@@ -18,14 +19,20 @@ namespace kvpaxos {
 template <typename T>
 class PatternTracker {
 public:
-    PatternTracker<T>()
+    PatternTracker<T>(int n_partitions)
         : executing_{true},
-          workload_graph_(model::Graph<T>())
-    {}
+          workload_graph_(model::Graph<T>()),
+          accesses_per_partition_{std::unordered_map<int, int>()}
+    {
+        for (auto i = 0; i < n_partitions; i++) {
+            accesses_per_partition_[i] = 0;
+        }
+    }
 
     PatternTracker<T>(std::unordered_set<T> initial_variables)
         : executing_{true},
-          workload_graph_(model::Graph<T>())
+          workload_graph_(model::Graph<T>()),
+          accesses_per_partition_{std::unordered_map<int, int>()}
     {
         for (const auto& variable: initial_variables) {
             workload_graph_.add_vertice(variable);
@@ -44,6 +51,10 @@ public:
         return workload_graph_;
     }
 
+    const std::unordered_map<int, int>& accesses_per_partition() {
+        return accesses_per_partition_;
+    }
+
     void run() {
         sem_init(&semaphore_, 0, 0);
         executing_ = true;
@@ -58,6 +69,22 @@ public:
         sem_post(&semaphore_);
     }
 
+    void register_access(const std::unordered_set<int>& partitions_ids) {
+        for (auto partition_id: partitions_ids) {
+            accesses_per_partition_[partition_id] += 1;
+        }
+    }
+
+    void register_accesses_to_partition(int partition_id, int number_of_accesses) {
+        accesses_per_partition_[partition_id] += number_of_accesses;
+    }
+
+    void reset_accesses() {
+        for (const auto& kv: accesses_per_partition_) {
+            auto partition_id = kv.first;
+            accesses_per_partition_[partition_id] = 0;
+        }
+    }
 
 private:
     void thread_loop() {
@@ -122,13 +149,13 @@ private:
     }
 
     model::Graph<T> workload_graph_;
+    std::unordered_map<int, int> accesses_per_partition_;
 
     bool executing_;
     std::thread update_thread_;
     std::queue<struct client_message> requests_queue_;
     sem_t semaphore_;
     std::mutex queue_mutex_;
-
 };
 
 }

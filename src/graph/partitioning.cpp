@@ -3,31 +3,23 @@
 
 namespace model {
 
-// This is a workaround to reuse the same method for both fennel
-// and refennel when calculating the vertex's partition.
-struct dummy_partition {
-    int weight_ = 0;
-
-    int weight() const {return weight_;}
-};
-
-// used during refennel
-static std::unordered_map<int, int> refennel_vertice_to_partition;  // maps vertice to
-                                                                    // prev part and weight
 
 std::vector<int> cut_graph (
     const Graph<int>& graph,
-    std::unordered_map<int, kvpaxos::Partition<int>>& partitions,
+    std::unordered_map<int, int>& vertice_to_partition,
+    std::unordered_map<int, int>& weight_per_partition,
     CutMethod method
 ) {
+    auto n_partitions = weight_per_partition.size();
+
     if (method == METIS) {
-        return multilevel_cut(graph, partitions.size(), method);
+        return multilevel_cut(graph, n_partitions, method);
     } else if (method == KAHIP) {
-        return multilevel_cut(graph, partitions.size(), method);
+        return multilevel_cut(graph, n_partitions, method);
     } else if (method == FENNEL) {
-        return fennel_cut(graph, partitions.size());
+        return fennel_cut(graph, n_partitions);
     } else {
-        return refennel_cut(graph, partitions);
+        return refennel_cut(graph, vertice_to_partition, weight_per_partition);
     }
 }
 
@@ -112,35 +104,32 @@ std::unordered_map<int, int> sum_neighbours(
     return partition_sums;
 }
 
-template <typename T>
 int fennel_vertice_partition(
-    const Graph<int>& graph,
     int vertice,
-    const T& partitions,
-    const std::unordered_map<int, int>& vertice_to_partition,
-    int max_partition_size,
     double alpha,
-    double gamma
+    double gamma,
+    int max_partition_size,
+    const Graph<int>& graph,
+    const std::unordered_map<int, int>& vertice_to_partition,
+    const std::unordered_map<int, int>& weight_per_partition
 ) {
     double biggest_score = -DBL_MAX;
     auto id = 0;
     auto designated_partition = -1;
-    auto neighbours_in_partition = std::move(
-        sum_neighbours(graph.vertice_edges(vertice), vertice_to_partition)
-    );
-    for (auto i = 0; i < partitions.size(); i++) {
-        auto partition_weight = partitions.at(i).weight();
-	if (max_partition_size) {
-	    if (partition_weight + graph.vertice_weight(vertice) > max_partition_size) {
-	        continue;
-	    }
-	}
+    auto neighbours_in_partition = sum_neighbours(graph.vertice_edges(vertice), vertice_to_partition);
+    for (auto i = 0; i < weight_per_partition.size(); i++) {
+        auto partition_weight = weight_per_partition.at(i);
+        if (max_partition_size) {
+            if (partition_weight + graph.vertice_weight(vertice) > max_partition_size) {
+                continue;
+            }
+        }
 
         int inter_cost;
         if (neighbours_in_partition.find(i) == neighbours_in_partition.end()) {
             inter_cost = 0;
         } else {
-            inter_cost = neighbours_in_partition[i];
+            inter_cost = neighbours_in_partition.at(i);
         }
 
         double intra_cost =
@@ -151,19 +140,16 @@ int fennel_vertice_partition(
         double score = inter_cost - intra_cost;
         if (score > biggest_score) {
             biggest_score = score;
-            designated_partition = id;
+            designated_partition = i;
         }
-        id++;
     }
 
     return designated_partition;
 }
 
 std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions) {
-    std::unordered_map<int, dummy_partition> partitions;
-    for (auto i = 0; i < n_partitions; i++) {
-        partitions.emplace(i, dummy_partition());
-    }
+    std::unordered_map<int, int> vertice_to_partition;
+    std::unordered_map<int, int> weight_per_partition;
 
     const auto edges_weight = graph.total_edges_weight();
     const auto vertex_weight = graph.total_vertex_weight();
@@ -171,21 +157,22 @@ std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions) {
     const double alpha =
         edges_weight * std::pow(n_partitions, (gamma - 1)) / std::pow(graph.total_vertex_weight(), gamma);
 
-    std::unordered_map<int, int> vertice_to_partition;
     std::vector<int> final_partitioning;
     auto sorted_vertex = std::move(graph.sorted_vertex());
-    auto partition_max_size = 1.2 * graph.total_vertex_weight() / n_partitions;
+    auto max_partition_size = 1.2 * graph.total_vertex_weight() / n_partitions;
     for (auto& vertice : sorted_vertex) {
-        auto partition = fennel_vertice_partition<std::unordered_map<int, dummy_partition>>(
-            graph, vertice, partitions, vertice_to_partition, partition_max_size, alpha, gamma
+        auto partition = fennel_vertice_partition(
+            vertice, alpha, gamma, max_partition_size,
+            graph, vertice_to_partition, weight_per_partition
         );
-	if (partition == -1) {
-	    partition_max_size = 0;  // remove partition limit
-	    partition = fennel_vertice_partition<std::unordered_map<int, dummy_partition>>(
-                graph, vertice, partitions, vertice_to_partition, partition_max_size, alpha, gamma
+        if (partition == -1) {
+            max_partition_size = 0;  // remove partition limit
+            partition = fennel_vertice_partition(
+                vertice, alpha, gamma, max_partition_size,
+                graph, vertice_to_partition, weight_per_partition
             );
-	}
-        partitions[partition].weight_ += graph.vertice_weight(vertice);
+        }
+        weight_per_partition[partition] += graph.vertice_weight(vertice);
         vertice_to_partition[vertice] = partition;
         final_partitioning.emplace_back(partition);
     }
@@ -195,9 +182,10 @@ std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions) {
 
 std::vector<int> refennel_cut(
     const Graph<int>& graph,
-    std::unordered_map<int, kvpaxos::Partition<int>>& partitions
+    std::unordered_map<int, int>& vertice_to_partition,
+    std::unordered_map<int, int>& weight_per_partition
 ) {
-    const auto n_partitions = partitions.size();
+    const auto n_partitions = weight_per_partition.size();
 
     const auto edges_weight = graph.total_edges_weight();
     const auto vertex_weight = graph.total_vertex_weight();
@@ -207,28 +195,24 @@ std::vector<int> refennel_cut(
 
     auto final_partitioning = std::vector<int>();
     auto sorted_vertex = std::move(graph.sorted_vertex());
-    auto partition_max_size = 1.2 * graph.total_vertex_weight() / n_partitions;
+    auto max_partition_size = 1.2 * graph.total_vertex_weight() / n_partitions;
     for (auto& vertice : sorted_vertex) {
-        auto new_partition = fennel_vertice_partition<std::unordered_map<int, kvpaxos::Partition<int>>>(
-            graph, vertice, partitions, refennel_vertice_to_partition,
-            partition_max_size, alpha, gamma
+        auto new_partition = fennel_vertice_partition(
+            vertice, alpha, gamma, max_partition_size,
+            graph, vertice_to_partition, weight_per_partition
         );
-	if (new_partition == -1) {
-	    partition_max_size = 0;  // remove partition limit
-	    new_partition = fennel_vertice_partition<std::unordered_map<int, kvpaxos::Partition<int>>>(
-                graph, vertice, partitions, refennel_vertice_to_partition,
-                partition_max_size, alpha, gamma
+        if (new_partition == -1) {
+            max_partition_size = 0;  // remove partition limit
+            new_partition = fennel_vertice_partition(
+                vertice, alpha, gamma, max_partition_size,
+                graph, vertice_to_partition, weight_per_partition
             );
-	}
-
-        if (refennel_vertice_to_partition.find(vertice) != refennel_vertice_to_partition.end()) {
-            auto old_partition_id = refennel_vertice_to_partition[vertice];
-            partitions.at(old_partition_id).remove_data(vertice);
         }
 
+        auto old_partition_id = vertice_to_partition.at(vertice);
         auto weight = graph.vertice_weight(vertice);
-        refennel_vertice_to_partition[vertice] = new_partition;
-        partitions.at(new_partition).insert_data(vertice);
+        weight_per_partition[old_partition_id] -= weight;
+        weight_per_partition[new_partition] += weight;
 
         final_partitioning.push_back(new_partition);
     }

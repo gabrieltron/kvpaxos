@@ -35,7 +35,7 @@ public:
     ) : n_partitions_{n_partitions},
         repartition_interval_{repartition_interval},
         repartition_method_{repartition_method},
-        pattern_tracker_{PatternTracker<T>()},
+        pattern_tracker_{PatternTracker<T>(n_partitions)},
         data_to_partition_id_{std::unordered_map<T, int>()}
     {
         for (auto i = 0; i < n_partitions_; i++) {
@@ -75,24 +75,25 @@ public:
             }
         }
 
-        auto partitions_ids = std::move(involved_partitions(request));
-        if (partitions_ids.empty()) {
+        auto involved_partitions_ids = std::move(involved_partitions(request));
+        if (involved_partitions_ids.empty()) {
             request.type = ERROR;
             return partitions_.at(0).push_request(request);
         }
 
-        auto arbitrary_partition_id = *begin(partitions_ids);
+        auto arbitrary_partition_id = *begin(involved_partitions_ids);
         auto& arbitrary_partition = partitions_.at(arbitrary_partition_id);
-        if (partitions_ids.size() > 1) {
-            sync_partitions(partitions_ids);
+        if (involved_partitions_ids.size() > 1) {
+            sync_partitions(involved_partitions_ids);
             arbitrary_partition.push_request(request);
-            sync_partitions(partitions_ids);
+            sync_partitions(involved_partitions_ids);
         } else {
             arbitrary_partition.push_request(request);
         }
 
         if (repartition_method_ != model::ROUND_ROBIN) {
             pattern_tracker_.push_request(request);
+            pattern_tracker_.register_access(involved_partitions_ids);
             n_dispatched_requests_++;
             if (
                 n_dispatched_requests_ % repartition_interval_ == 0
@@ -175,20 +176,28 @@ private:
 
     void repartition_data() {
         const auto& workload_graph = pattern_tracker_.workload_graph();
-        auto partition_scheme = std::move(
-            model::cut_graph(workload_graph, partitions_, repartition_method_)
+        auto accesses_per_partition = pattern_tracker_.accesses_per_partition();
+        auto partition_scheme = model::cut_graph(
+            workload_graph,
+            data_to_partition_id_,
+            accesses_per_partition,
+            repartition_method_
         );
 
         auto sorted_vertex = std::move(workload_graph.sorted_vertex());
         data_to_partition_id_ = std::unordered_map<T, int>();
+        pattern_tracker_.reset_accesses();
         for (auto i = 0; i < partition_scheme.size(); i++) {
             auto partition_id = partition_scheme[i];
             if (partition_id >= n_partitions_) {
                 printf("ERROR: partition was %d!\n", partition_id);
                 fflush(stdout);
             }
+
             auto data = sorted_vertex[i];
             data_to_partition_id_.emplace(data, partition_id);
+            auto vertice_weight = pattern_tracker_.workload_graph().vertice_weight(data);
+            pattern_tracker_.register_accesses_to_partition(partition_id, vertice_weight);
         }
     }
 

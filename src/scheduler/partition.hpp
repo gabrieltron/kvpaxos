@@ -70,23 +70,10 @@ public:
 
     void insert_data(const T& data, int weight = 0) {
         data_set_.insert(data);
-        weight_[data] = weight;
-        total_weight_ += weight;
     }
 
     void remove_data(const T& data) {
         data_set_.erase(data);
-        total_weight_ -= weight_.at(data);
-        weight_.erase(data);
-    }
-
-    void increase_weight(const T& data, int weight = 1) {
-        weight_[data] += weight;
-        total_weight_ += weight;
-    }
-
-    int weight() const {
-        return total_weight_;
     }
 
     int id() const {
@@ -223,9 +210,7 @@ private:
     std::queue<struct client_message> requests_queue_;
     std::mutex queue_mutex_;
 
-    int total_weight_ = 0;
     std::unordered_set<T> data_set_;
-    std::unordered_map<T, int> weight_;
 };
 
 }
