@@ -95,7 +95,7 @@ private:
             }
 
             queue_mutex_.lock();
-                auto request = std::move(requests_queue_.front());
+                auto request = requests_queue_.front();
                 requests_queue_.pop();
             queue_mutex_.unlock();
 
@@ -104,6 +104,7 @@ private:
             case SYNC:
             {
                 auto barrier = (pthread_barrier_t*) request.s_addr;
+                pthread_barrier_wait(barrier);
                 break;
             }
             default:
