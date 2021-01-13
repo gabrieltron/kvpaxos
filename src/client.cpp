@@ -158,7 +158,7 @@ schedule_send_requests_event(
     auto requests_path = toml::find<std::string>(
         config, "requests_path"
     );
-    auto requests = std::move(workload::import_requests(requests_path, "requests"));
+    auto requests = workload::import_cs_requests(requests_path);
     auto* requests_pointer = new std::vector<workload::Request>(requests);
     auto sleep_time = toml::find<int>(
         config, "sleep_time"

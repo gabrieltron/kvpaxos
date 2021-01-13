@@ -136,12 +136,10 @@ initialize_scheduler(const toml_config& config)
 	);
 
 	auto initial_requests = toml::find<std::string>(
-		config, "requests_path"
+		config, "load_requests_path"
 	);
 	if (not initial_requests.empty()) {
-		auto populate_requests = std::move(
-			workload::import_requests(initial_requests, "load_requests")
-		);
+		auto populate_requests = workload::import_cs_requests(initial_requests);
 		scheduler->process_populate_requests(populate_requests);
 	}
 
