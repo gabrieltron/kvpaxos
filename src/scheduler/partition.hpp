@@ -61,9 +61,9 @@ public:
         worker_thread_ = std::thread(&Partition<T>::thread_loop, this);
     }
 
-    void push_request(struct client_message request) {
+    void push_request(const struct client_message& request) {
         queue_mutex_.lock();
-            requests_queue_.push(std::move(request));
+            requests_queue_.push(request);
         queue_mutex_.unlock();
         sem_post(&semaphore_);
     }
@@ -89,12 +89,6 @@ public:
     }
 
 private:
-    void on_event(struct bufferevent* bev, short ev, void *arg)
-    {
-        if (ev & BEV_EVENT_EOF || ev & BEV_EVENT_ERROR) {
-            bufferevent_free(bev);
-        }
-    }
 
     struct sockaddr_in get_client_addr(unsigned long ip, unsigned short port)
     {
@@ -126,7 +120,7 @@ private:
             }
 
             queue_mutex_.lock();
-                auto request = std::move(requests_queue_.front());
+                auto request = requests_queue_.front();
                 requests_queue_.pop();
             queue_mutex_.unlock();
 
@@ -139,7 +133,7 @@ private:
             {
             case READ:
             {
-                answer = std::move(storage_.read(key));
+                answer = storage_.read(key);
                 break;
             }
 
@@ -153,15 +147,12 @@ private:
             case SCAN:
             {
                 auto length = std::stoi(request_args);
-                auto values = std::move(storage_.scan(key, length));
+                auto values = storage_.scan(key, length);
 
 
                 std::ostringstream oss;
                 std::copy(values.begin(), values.end(), std::ostream_iterator<std::string>(oss, ","));
                 answer = std::string(oss.str());
-
-                std::vector<T> keys(length);
-                std::iota(keys.begin(), keys.end(), 1);
                 break;
             }
 
