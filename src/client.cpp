@@ -53,7 +53,7 @@ send_request(evutil_socket_t fd, short event, void *arg)
     v->id = requests_id;
     v->type = request.type();
     v->key = request.key();
-    if (request.args().empty()) {
+    if (request.type() == WRITE and request.args().empty()) {
         memset(v->args, '#', VALUE_SIZE);
         v->args[VALUE_SIZE] = '\0';
         v->size = VALUE_SIZE;
