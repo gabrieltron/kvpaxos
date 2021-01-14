@@ -45,8 +45,9 @@ std::vector<Request> import_cs_requests(const std::string& file_path)
             }
         }
     }
-
+    reading_buffer[buffer_index] = '\0';
     requests.emplace_back(make_request(type_buffer, key_buffer, arg_buffer));
+
     return requests;
 }
 
