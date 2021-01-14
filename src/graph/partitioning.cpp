@@ -3,6 +3,9 @@
 
 namespace model {
 
+bool FIRST_REPARTITION = true;  // Used by ReFENNEL. Its first repartition must call
+                                // FENNEL on its place.
+
 
 std::vector<int> cut_graph (
     const Graph<int>& graph,
@@ -186,6 +189,10 @@ std::vector<int> refennel_cut(
     std::unordered_map<int, int>& weight_per_partition
 ) {
     const auto n_partitions = weight_per_partition.size();
+    if(FIRST_REPARTITION) {
+        FIRST_REPARTITION = false;
+        return fennel_cut(graph, n_partitions);
+    }
 
     const auto edges_weight = graph.total_edges_weight();
     const auto vertex_weight = graph.total_vertex_weight();
