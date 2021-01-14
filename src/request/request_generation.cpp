@@ -46,6 +46,7 @@ std::vector<Request> import_cs_requests(const std::string& file_path)
         }
     }
 
+    requests.emplace_back(make_request(type_buffer, key_buffer, arg_buffer));
     return requests;
 }
 
