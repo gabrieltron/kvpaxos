@@ -22,6 +22,8 @@ public:
     int key() const {return key_;}
     const std::string& args() const {return args_;}
 
+    void set_args(const std::string& args) {args_ = args;}
+
 private:
     request_type type_;
     int key_;

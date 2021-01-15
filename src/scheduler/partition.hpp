@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "constants/constants.h"
 #include "graph/graph.hpp"
 #include "request/request.hpp"
 #include "storage/storage.h"
@@ -46,10 +47,12 @@ public:
         }
     }
 
-    static void populate_storage(const std::vector<workload::Request>& requests) {
+    static void populate_storage(std::vector<workload::Request>& requests) {
         for (auto& request : requests) {
             if (request.type() != WRITE) {
                 continue;
+            } else if (request.args().empty()) {
+                request.set_args(std::string(VALUE_SIZE, '*'));
             }
 
             storage_.write(request.key(), request.args());

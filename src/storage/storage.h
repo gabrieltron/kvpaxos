@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "compresser/compresser.h"
+#include "constants/constants.h"
 #include "tbb/concurrent_unordered_map.h"
 #include "types/types.h"
 

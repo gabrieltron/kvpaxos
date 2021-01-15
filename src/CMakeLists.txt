@@ -5,6 +5,7 @@ add_subdirectory(types)
 add_subdirectory(storage)
 add_subdirectory(scheduler)
 add_subdirectory(graph)
+add_subdirectory(constants)
 
 add_executable(client)
 add_executable(replica)
@@ -20,6 +21,7 @@ target_link_libraries(
         PRIVATE
             CONAN_PKG::tbb
             CONAN_PKG::toml11
+            constants
             request
             evclient
             evpaxos

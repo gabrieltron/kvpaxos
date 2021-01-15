@@ -3,7 +3,6 @@
 
 namespace kvstorage {
 
-int VALUE_SIZE = 4096;
 std::string template_value(VALUE_SIZE, '*');
 
 std::string Storage::read(int key) const {

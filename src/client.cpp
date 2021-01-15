@@ -15,12 +15,10 @@
 #include <sstream>
 #include <string>
 
+#include "constants/constants.h"
 #include "evclient/evclient.h"
 #include "request/request_generation.h"
 
-
-const int OUTSTANDING = 1;
-const int VALUE_SIZE = 4096;
 
 using toml_config = toml::basic_value<
 	toml::discard_comments, std::unordered_map, std::vector

@@ -45,7 +45,7 @@ public:
         pthread_barrier_init(&repartition_barrier_, NULL, 2);
     }
 
-    void process_populate_requests(const std::vector<workload::Request>& requests) {
+    void process_populate_requests(std::vector<workload::Request>& requests) {
         for (auto& request : requests) {
             add_key(request.key());
         }
