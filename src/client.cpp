@@ -73,8 +73,7 @@ send_request(evutil_socket_t fd, short event, void *arg)
 
     if (requests_id != requests->size()) {
         dispatch_args->request_id++;
-        long delay = sleep_time / n_listener_threads;
-        auto time = (struct timeval){0, delay};
+        auto time = (struct timeval){0, sleep_time};
         auto send_event = evtimer_new(
             c->base, send_request, dispatch_args
         );
