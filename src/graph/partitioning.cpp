@@ -152,7 +152,9 @@ int fennel_vertice_partition(
 
 std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions) {
     std::unordered_map<int, int> vertice_to_partition;
-    std::unordered_map<int, int> weight_per_partition;
+    std::unordered_map<int, int> weight_per_partition{
+        {0, 0}, {1, 0}, {2, 0}, {3, 0}
+    };
 
     const auto edges_weight = graph.total_edges_weight();
     const auto vertex_weight = graph.total_vertex_weight();
