@@ -227,7 +227,6 @@ private:
                     auto partition = (Partition<T>*) request.s_addr;
 		            data_to_partition_copy_.emplace(request.key, partition);
 		            partition->insert_data(request.key);
-                    continue;
                 }
                 update_graph(request);
             }
