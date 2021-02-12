@@ -266,14 +266,8 @@ private:
         auto start_timestamp = std::chrono::system_clock::now();
         repartition_timestamps_.emplace_back(start_timestamp);
 
-        auto partition_scheme = std::move(
-            model::cut_graph(
-                workload_graph_,
-                partitions_,
-                repartition_method_,
-                *data_to_partition_,
-                first_repartition
-            )
+        auto partition_scheme = model::cut_graph(
+            workload_graph_, n_partitions_, repartition_method_
         );
 
         delete data_to_partition_;
@@ -290,9 +284,6 @@ private:
         }
 
         data_to_partition_copy_ = *data_to_partition_;
-        if (first_repartition) {
-            first_repartition = false;
-        }
     }
 
     int n_partitions_;
@@ -313,7 +304,6 @@ private:
     model::Graph<T> workload_graph_;
     model::CutMethod repartition_method_;
     int repartition_interval_;
-    bool first_repartition = true;
     pthread_barrier_t repartition_barrier_;
 };
 
