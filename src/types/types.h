@@ -19,6 +19,8 @@
 #include <evpaxos.h>
 #include <evpaxos/paxos.h>
 
+#include "constants/constants.h"
+
 
 typedef std::chrono::_V2::system_clock::time_point time_point;
 
@@ -32,7 +34,7 @@ struct client_args {
 
 struct reply_message {
 	int id;
-	char answer[1031];
+	char answer[VALUE_SIZE+MAX_SCAN_LENGTH];
 };
 
 enum request_type

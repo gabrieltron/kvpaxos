@@ -2,6 +2,7 @@
 #define _KVPAXOS_CONSTANTS_H_
 
 const int VALUE_SIZE = 4096;
+const int MAX_SCAN_LENGTH = 8;
 const int OUTSTANDING = 1;
 
 

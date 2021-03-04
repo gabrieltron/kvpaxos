@@ -5,6 +5,7 @@
 // Original link http://panthema.net/2007/0328-ZLibString.html
 
 #include "compresser.h"
+#include "constants/constants.h"
 
 
 /** Compress a STL string using zlib with given compression level and return
@@ -22,7 +23,7 @@ std::string compress(const std::string& str,
     zs.avail_in = str.size();           // set the z_stream's input
 
     int ret;
-    char outbuffer[4096];
+    char outbuffer[VALUE_SIZE];
     std::string outstring;
 
     // retrieve the compressed bytes blockwise
@@ -63,7 +64,7 @@ std::string decompress(const std::string& str)
     zs.avail_in = str.size();
 
     int ret;
-    char outbuffer[4096];
+    char outbuffer[VALUE_SIZE];
     std::string outstring;
 
     // get the decompressed bytes blockwise using repeated calls to inflate

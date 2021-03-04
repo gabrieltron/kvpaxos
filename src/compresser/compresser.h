@@ -16,6 +16,8 @@
 
 #include <zlib.h>
 
+#include "constants/constants.h"
+
 /** Compress a STL string using zlib with given compression level and return
   * the binary data. */
 std::string compress(const std::string& str,
