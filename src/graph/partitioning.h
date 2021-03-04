@@ -21,12 +21,13 @@
 
 namespace model {
 
-enum CutMethod {METIS, KAHIP, FENNEL, REFENNEL, ROUND_ROBIN};
+enum CutMethod {METIS, KAHIP, FENNEL, REFENNEL, REFENNEL2, ROUND_ROBIN};
 const std::unordered_map<std::string, CutMethod> string_to_cut_method({
     {"METIS", METIS},
     {"KAHIP", KAHIP},
     {"FENNEL", FENNEL},
     {"REFENNEL", REFENNEL},
+    {"REFENNEL2", REFENNEL2},
     {"ROUND_ROBIN", ROUND_ROBIN}
 });
 
@@ -43,7 +44,8 @@ std::vector<int> fennel_cut(const Graph<int>& graph, int n_partitions);
 std::vector<int> refennel_cut(
     const Graph<int>& graph,
     std::unordered_map<int, int>& vertice_to_partition,
-    std::unordered_map<int, int>& size_per_partition
+    std::unordered_map<int, int>& size_per_partition,
+    CutMethod method
 );
 
 int fennel_inter_cost(
