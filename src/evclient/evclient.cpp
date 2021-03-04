@@ -44,8 +44,8 @@ connect_to_proposer(
 
 void
 listen_server(
-	struct client* client, unsigned short port,
-	pthread_barrier_t& start_barrier
+	struct client* client, int n_total_requests,
+	unsigned short port, pthread_barrier_t& start_barrier
 ) {
 	auto fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd < 0) {
@@ -75,6 +75,9 @@ listen_server(
 		struct reply_message reply;
 		auto n_bytes = recv(fd, &reply, sizeof(reply_message), 0);
 		if (n_bytes == -1) {
+			if (answered_requests.size() == n_total_requests) {
+				break;
+			}
 			continue;
 		}
 

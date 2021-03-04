@@ -25,8 +25,8 @@ struct client* make_client(
 	reply_callback on_reply
 );
 void listen_server(
-	struct client* c, unsigned short port,
-	pthread_barrier_t& start_barrier);
+	struct client* c, int n_total_requests,
+	 unsigned short port, pthread_barrier_t& start_barrier);
 void client_free(struct client* c);
 
 
