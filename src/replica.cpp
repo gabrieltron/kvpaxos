@@ -84,7 +84,9 @@ deliver(unsigned iid, char* value, size_t size, void* arg)
 }
 
 void
-print_throughput(int sleep_duration, kvpaxos::Scheduler<int>* scheduler)
+print_throughput(
+	int n_total_requests, int sleep_duration, 
+	kvpaxos::Scheduler<int>* scheduler, event_base* base)
 {
 	auto already_counted = 0;
 	while (RUNNING) {
@@ -93,6 +95,10 @@ print_throughput(int sleep_duration, kvpaxos::Scheduler<int>* scheduler)
 		std::cout << std::chrono::system_clock::now().time_since_epoch().count() << ",";
 		std::cout << throughput << "\n";
 		already_counted += throughput;
+		if (already_counted == n_total_requests) {
+	        event_base_loopexit(base, NULL);
+			break;
+		}
 	}
 }
 
@@ -174,11 +180,15 @@ start_replica(int id, const toml_config& config)
 	auto* args = (struct replica_args*) replica->arg;
 	args->scheduler = scheduler;
 
+    auto n_total_requests = toml::find<int>(
+        config, "n_requests"
+    );
+
 	std::thread throughput_thread(
-		print_throughput, SLEEP, scheduler
+		print_throughput, n_total_requests, SLEEP, scheduler, args->base
 	);
 
-	event_base_dispatch(args->base);
+	event_base_loop(args->base, EVLOOP_NO_EXIT_ON_EMPTY);
 
 	throughput_thread.join();
 	free_replica(replica);
