@@ -79,6 +79,8 @@ send_request(evutil_socket_t fd, short event, void *arg)
             c->base, send_request, dispatch_args
         );
         event_add(send_event, &time);
+    } else {
+        event_base_loopexit(c->base, NULL);
     }
 }
 
@@ -185,6 +187,9 @@ start_client(const toml_config& config, unsigned short port, bool verbose)
     auto n_listener_threads = toml::find<int>(
         config, "n_threads"
     );
+    auto n_total_requests = toml::find<int>(
+        config, "n_requests"
+    );
 
     pthread_barrier_t start_barrier;
     pthread_barrier_init(&start_barrier, NULL, n_listener_threads+1);
@@ -192,7 +197,8 @@ start_client(const toml_config& config, unsigned short port, bool verbose)
     std::vector<std::thread> listener_threads;
     for (auto i = 0; i < n_listener_threads; i++) {
         listener_threads.emplace_back(
-            listen_server, client, port+i, std::ref(start_barrier)
+            listen_server, client, n_total_requests,
+            port+i, std::ref(start_barrier)
         );
     }
     pthread_barrier_wait(&start_barrier);
@@ -201,6 +207,10 @@ start_client(const toml_config& config, unsigned short port, bool verbose)
         client, start_barrier, n_listener_threads, config
     );
 	event_base_loop(client->base, EVLOOP_NO_EXIT_ON_EMPTY);
+
+    for (auto& thread: listener_threads) {
+        thread.join();
+    }
 
     free_client_args((struct client_args *)client->args);
     client_free(client);
