@@ -34,7 +34,7 @@ struct client_args {
 
 struct reply_message {
 	int id;
-	char answer[VALUE_SIZE+MAX_SCAN_LENGTH];
+	char answer[VALUE_SIZE*MAX_SCAN_LENGTH+MAX_SCAN_LENGTH];
 };
 
 enum request_type
