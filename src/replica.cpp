@@ -141,13 +141,10 @@ initialize_scheduler(const toml_config& config)
 		repartition_interval, n_partitions, repartition_method
 	);
 
-	auto initial_requests = toml::find<std::string>(
-		config, "load_requests_path"
+	auto n_initial_keys = toml::find<int>(
+		config, "n_initial_keys"
 	);
-	if (not initial_requests.empty()) {
-		auto populate_requests = workload::import_cs_requests(initial_requests);
-		scheduler->process_populate_requests(populate_requests);
-	}
+	scheduler->populate_n_initial_keys(n_initial_keys);
 
 	return scheduler;
 }

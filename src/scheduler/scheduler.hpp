@@ -45,11 +45,11 @@ public:
         pthread_barrier_init(&repartition_barrier_, NULL, 2);
     }
 
-    void process_populate_requests(std::vector<workload::Request>& requests) {
-        for (auto& request : requests) {
-            add_key(request.key());
+    void populate_n_initial_keys(int n_keys) {
+        for (auto i = 0; i < n_keys; i++) {
+            add_key(i);
         }
-        Partition<T>::populate_storage(requests);
+        Partition<T>::populate_n_initial_keys(n_keys);
     }
 
     void run() {

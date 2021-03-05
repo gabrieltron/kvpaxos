@@ -47,15 +47,10 @@ public:
         }
     }
 
-    static void populate_storage(std::vector<workload::Request>& requests) {
-        for (auto& request : requests) {
-            if (request.type() != WRITE) {
-                continue;
-            } else if (request.args().empty()) {
-                request.set_args(std::string(VALUE_SIZE, '*'));
-            }
-
-            storage_.write(request.key(), request.args());
+    static void populate_n_initial_keys(int n_keys) {
+        for (auto i = 0; i < n_keys; i++) {
+            auto default_value = std::string(VALUE_SIZE, '*');
+            storage_.write(i, default_value);
         }
     }
 
