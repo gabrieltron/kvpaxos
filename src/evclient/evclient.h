@@ -12,6 +12,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <signal.h>
+#include <mutex>
 #include <netinet/tcp.h>
 #include <unordered_map>
 #include <unordered_set>
@@ -25,8 +26,13 @@ struct client* make_client(
 	reply_callback on_reply
 );
 void listen_server(
-	struct client* c, int n_total_requests,
-	 unsigned short port, pthread_barrier_t& start_barrier);
+	struct client* client, 
+	int& n_answered_requests,
+	std::mutex& requests_counter_mutex,
+	int n_total_requests, 
+	unsigned short port,
+	pthread_barrier_t& start_barrier
+);
 void client_free(struct client* c);
 
 

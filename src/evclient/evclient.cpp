@@ -44,8 +44,12 @@ connect_to_proposer(
 
 void
 listen_server(
-	struct client* client, int n_total_requests,
-	unsigned short port, pthread_barrier_t& start_barrier
+	struct client* client, 
+	int& n_answered_requests,
+	std::mutex& requests_counter_mutex,
+	int n_total_requests, 
+	unsigned short port,
+	pthread_barrier_t& start_barrier
 ) {
 	auto fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd < 0) {
@@ -75,7 +79,7 @@ listen_server(
 		struct reply_message reply;
 		auto n_bytes = recv(fd, &reply, sizeof(reply_message), 0);
 		if (n_bytes == -1) {
-			if (answered_requests.size() == n_total_requests) {
+			if (n_answered_requests == n_total_requests) {
 				break;
 			}
 			continue;
@@ -83,6 +87,11 @@ listen_server(
 
 		if (answered_requests.find(reply.id) != answered_requests.end()) {
 			continue;
+		}
+
+		{
+			std::scoped_lock lock(requests_counter_mutex);
+			n_answered_requests++;
 		}
 
 		client->reply_cb(reply, client->args);

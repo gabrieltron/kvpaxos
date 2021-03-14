@@ -3,7 +3,9 @@
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 #include <event2/listener.h>
+#include <functional>
 #include <iostream>
+#include <mutex>
 #include <netinet/tcp.h>
 #include <pthread.h>
 #include <semaphore.h>
@@ -194,10 +196,17 @@ start_client(const toml_config& config, unsigned short port, bool verbose)
     pthread_barrier_init(&start_barrier, NULL, n_listener_threads+1);
 
     std::vector<std::thread> listener_threads;
+    int n_answered_requests = 0;
+    std::mutex n_answered_requests_mutex;
     for (auto i = 0; i < n_listener_threads; i++) {
         listener_threads.emplace_back(
-            listen_server, client, n_total_requests,
-            port+i, std::ref(start_barrier)
+            listen_server, 
+            client,
+            std::ref(n_answered_requests),
+            std::ref(n_answered_requests_mutex),
+            n_total_requests,
+            port+i,
+            std::ref(start_barrier)
         );
     }
     pthread_barrier_wait(&start_barrier);
