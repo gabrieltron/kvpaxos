@@ -214,7 +214,10 @@ start_client(const toml_config& config,
             std::ref(start_barrier)
         );
     }
+    std::cout << "CReated listeners" << std::endl;
     pthread_barrier_wait(&start_barrier);
+    std::cout << "All listeners ready" << std::endl;
+
 
     schedule_send_requests_event(
         client, start_barrier, n_listener_threads, requests, config
@@ -264,7 +267,7 @@ int main(int argc, char* argv[]) {
     for (auto i = 0; i < n_dispatchers_threads; i++) {
         client_threads.emplace_back(
             start_client, std::ref(config), std::ref(requests),
-            reply_port+n_listener_threads*n_dispatchers_threads,
+            reply_port+n_listener_threads*i,
             verbose
         );
     }
