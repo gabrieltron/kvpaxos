@@ -20,6 +20,7 @@
 
 #include "constants/constants.h"
 #include "evclient/evclient.h"
+#include "request/request.hpp"
 #include "request/request_generation.h"
 
 
@@ -29,7 +30,7 @@ using toml_config = toml::basic_value<
 
 struct dispatch_requests_args {
     client* c;
-    std::vector<workload::Request>* requests;
+    const std::vector<workload::Request>* requests;
     int request_id, sleep_time, n_listener_threads;
 };
 
@@ -159,20 +160,16 @@ schedule_send_requests_event(
     struct client* client,
     pthread_barrier_t& start_barrier,
     int n_listener_threads,
+    const std::vector<workload::Request>& requests,
     const toml_config& config)
 {
-    auto requests_path = toml::find<std::string>(
-        config, "requests_path"
-    );
-    auto requests = workload::import_cs_requests(requests_path);
-    auto* requests_pointer = new std::vector<workload::Request>(requests);
     auto sleep_time = toml::find<int>(
         config, "sleep_time"
     );
 
     auto* dispatch_args = new struct dispatch_requests_args();
     dispatch_args->c = client;
-    dispatch_args->requests = requests_pointer;
+    dispatch_args->requests = &requests;
     dispatch_args->request_id = 0;
     dispatch_args->sleep_time = sleep_time;
     dispatch_args->n_listener_threads = n_listener_threads;
@@ -185,8 +182,11 @@ schedule_send_requests_event(
 }
 
 static void
-start_client(const toml_config& config, unsigned short port, bool verbose)
-{
+start_client(const toml_config& config, 
+             const std::vector<workload::Request>& requests,
+             unsigned short port,
+             bool verbose) {
+
     auto* client = make_ev_client(config);
     client->args = make_client_args(config, port, verbose);
 
@@ -217,7 +217,7 @@ start_client(const toml_config& config, unsigned short port, bool verbose)
     pthread_barrier_wait(&start_barrier);
 
     schedule_send_requests_event(
-        client, start_barrier, n_listener_threads, config
+        client, start_barrier, n_listener_threads, requests, config
     );
 	event_base_loop(client->base, EVLOOP_NO_EXIT_ON_EMPTY);
 
@@ -249,7 +249,29 @@ int main(int argc, char* argv[]) {
     }
     srand (time(NULL));
 
-    start_client(config, reply_port, verbose);
+    auto requests_path = toml::find<std::string>(
+        config, "requests_path"
+    );
+    auto requests = workload::import_cs_requests(requests_path);
+    auto n_dispatchers_threads = toml::find<int>(
+        config, "n_dispatchers_threads"
+    );
+    auto n_listener_threads = toml::find<int>(
+        config, "n_threads"
+    );
+    
+    std::vector<std::thread> client_threads;
+    for (auto i = 0; i < n_dispatchers_threads; i++) {
+        client_threads.emplace_back(
+            start_client, std::ref(config), std::ref(requests),
+            reply_port+n_listener_threads*n_dispatchers_threads,
+            verbose
+        );
+    }
+
+    for (auto& thread: client_threads) {
+        thread.join();
+    }
 
     return 0;
 }
