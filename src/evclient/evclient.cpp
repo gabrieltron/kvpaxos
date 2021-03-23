@@ -1,5 +1,6 @@
 #include "evclient.h"
 
+bool RUNNING = true;
 
 long
 timeval_diff(struct timeval* t1, struct timeval* t2)
@@ -15,6 +16,7 @@ void
 handle_sigint(int sig, short ev, void* arg)
 {
 	struct event_base* base = (struct event_base*)arg;
+	RUNNING = false;
 	printf("Caught signal %d\n", sig);
 	event_base_loopexit(base, NULL);
 }
@@ -75,7 +77,7 @@ listen_server(
 
 	std::unordered_set<int> answered_requests;
 	pthread_barrier_wait(&start_barrier);
-	while (true) {
+	while (RUNNING) {
 		struct reply_message reply;
 		auto n_bytes = recv(fd, &reply, sizeof(reply_message), 0);
 		if (n_bytes == -1) {
