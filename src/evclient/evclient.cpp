@@ -81,6 +81,8 @@ listen_server(
 		if (n_bytes == -1) {
 			if (n_answered_requests == n_total_requests) {
 				break;
+			} else if(n_answered_requests >= 99*n_total_requests/100) {
+				break;
 			}
 			continue;
 		}
@@ -135,13 +137,13 @@ void
 client_free(struct client* c)
 {
 	free(c->send_buffer);
-	free(c->listener);
+	//free(c->listener);
 	bufferevent_free(c->bev);
-	event_free(c->stats_ev);
+	//event_free(c->stats_ev);
 	event_free(c->sig);
 	event_base_free(c->base);
-	if (c->learner)
-		evlearner_free(c->learner);
+	// (c->learner)
+//		evlearner_free(c->learner);
 	delete c->sent_requests_timestamp;
 	free(c);
 }

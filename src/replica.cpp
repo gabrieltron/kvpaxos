@@ -95,7 +95,7 @@ print_throughput(
 		std::cout << std::chrono::system_clock::now().time_since_epoch().count() << ",";
 		std::cout << throughput << "\n";
 		already_counted += throughput;
-		if (already_counted == n_total_requests) {
+		if (already_counted == 3*n_total_requests) {
 	        event_base_loopexit(base, NULL);
 			break;
 		}

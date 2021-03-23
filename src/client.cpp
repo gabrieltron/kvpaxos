@@ -9,6 +9,7 @@
 #include <netinet/tcp.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <time.h>
 #include <tbb/concurrent_unordered_map.h>
 #include <thread>
 #include <unordered_map>
@@ -75,7 +76,11 @@ send_request(evutil_socket_t fd, short event, void *arg)
 
     if (requests_id != requests->size()) {
         dispatch_args->request_id++;
-        auto time = (struct timeval){0, sleep_time};
+	auto sleepy = (struct timespec){0, sleep_time};
+	nanosleep(&sleepy, &sleepy);
+
+
+        auto time = (struct timeval){0, 0};
         auto send_event = evtimer_new(
             c->base, send_request, dispatch_args
         );
