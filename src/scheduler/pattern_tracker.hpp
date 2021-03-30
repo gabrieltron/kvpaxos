@@ -55,6 +55,12 @@ public:
         return accesses_per_partition_;
     }
 
+    void populate_n_sequential_vertices(int n_vertices) {
+        for (auto i = 0; i < n_vertices; i++) {
+            workload_graph_.add_vertice(i);
+        }
+    }
+
     void run() {
         sem_init(&semaphore_, 0, 0);
         executing_ = true;

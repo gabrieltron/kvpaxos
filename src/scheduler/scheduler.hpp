@@ -50,6 +50,7 @@ public:
             add_key(i);
         }
         Partition<T>::populate_n_initial_keys(n_keys);
+        pattern_tracker_.populate_n_sequential_vertices(n_keys);
     }
 
     void run() {
